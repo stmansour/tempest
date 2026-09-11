@@ -1,0 +1,690 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  user-select: none;
+}
+
+body {
+  background-color: #000000;
+  color: #ffffff;
+  font-family: 'Press Start 2P', monospace;
+  overflow: hidden;
+  width: 100vw;
+  height: 100vh;
+}
+
+/* App Main Container: Two-Panel Arcade Layout */
+#arcade-app {
+  display: flex;
+  flex-direction: row;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: #000000;
+}
+
+/* ==========================================================================
+   LEFT PANEL: Arcade Marquee, Controls & Scoring Guide
+   ========================================================================== */
+#arcade-sidebar {
+  flex: 0 0 clamp(380px, 30vw, 480px);
+  width: clamp(380px, 30vw, 480px);
+  height: 100vh;
+  background: linear-gradient(180deg, #0e121a 0%, #06080d 100%);
+  border-right: 3px solid #1a2233;
+  box-shadow: inset -10px 0 35px rgba(0, 0, 0, 0.85), 10px 0 30px rgba(0, 0, 0, 0.7);
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 20px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  z-index: 10;
+}
+
+/* Custom Sleek Scrollbar */
+#arcade-sidebar::-webkit-scrollbar {
+  width: 6px;
+}
+#arcade-sidebar::-webkit-scrollbar-track {
+  background: #080a10;
+}
+#arcade-sidebar::-webkit-scrollbar-thumb {
+  background: #1e283d;
+  border-radius: 3px;
+}
+#arcade-sidebar::-webkit-scrollbar-thumb:hover {
+  background: #00e5ff;
+}
+
+/* Marquee Header Artwork */
+.marquee-art-card {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  flex-shrink: 0;
+  padding: 0;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #000000;
+  border: 2px solid #202b40;
+  box-shadow: 0 0 25px rgba(0, 200, 255, 0.18), 0 8px 24px rgba(0, 0, 0, 0.9);
+}
+
+.marquee-header-img {
+  display: block;
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+  filter: drop-shadow(0 0 6px rgba(0, 220, 255, 0.25));
+  transition: filter 0.3s ease;
+}
+
+.marquee-header-img:hover {
+  filter: drop-shadow(0 0 12px rgba(0, 220, 255, 0.5));
+}
+
+.marquee-logo-wrapper {
+  position: relative;
+  margin-bottom: 8px;
+}
+
+.marquee-title {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 38px;
+  font-weight: 900;
+  letter-spacing: 6px;
+  color: #ffffff;
+  text-shadow: 
+    0 0 10px rgba(255, 255, 255, 0.9),
+    0 0 25px rgba(0, 220, 255, 0.8),
+    0 0 45px rgba(0, 100, 255, 0.6);
+  margin: 0;
+  line-height: 1.1;
+}
+
+.marquee-rainbow-bar {
+  height: 4px;
+  width: 90%;
+  margin: 8px auto 0;
+  background: linear-gradient(90deg, 
+    #ff0000 0%, 
+    #ffff00 20%, 
+    #00ff00 40%, 
+    #00e5ff 60%, 
+    #cc00ff 80%, 
+    #ffffff 100%
+  );
+  border-radius: 2px;
+  box-shadow: 0 0 12px rgba(0, 220, 255, 0.8);
+}
+
+.marquee-meta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.atari-badge {
+  background: #cc0000;
+  color: #ffffff;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 10px;
+  font-weight: 900;
+  padding: 3px 8px;
+  border-radius: 3px;
+  letter-spacing: 2px;
+  box-shadow: 0 0 10px rgba(255, 0, 0, 0.5);
+}
+
+.tech-badge {
+  font-size: 8px;
+  color: #6d82a6;
+  letter-spacing: 1px;
+}
+
+/* Control Panel Card: Coin & Action Buttons */
+.control-panel-card {
+  background: #090d14;
+  border: 2px solid #1a2538;
+  border-radius: 10px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  box-shadow: inset 0 2px 10px rgba(0,0,0,0.6);
+}
+
+/* Coin Door Row */
+.coin-door-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.arcade-coin-btn {
+  flex: 1;
+  background: linear-gradient(180deg, #d41c1c 0%, #800808 100%);
+  border: 2px solid #ff4d4d;
+  border-radius: 6px;
+  color: #fff;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 11px;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  cursor: pointer;
+  box-shadow: 
+    0 4px 0 #500404,
+    0 0 20px rgba(255, 0, 0, 0.4),
+    inset 0 1px 1px rgba(255, 255, 255, 0.4);
+  transition: all 0.1s ease;
+}
+
+.arcade-coin-btn:hover {
+  background: linear-gradient(180deg, #eb2828 0%, #990a0a 100%);
+  box-shadow: 
+    0 4px 0 #500404,
+    0 0 28px rgba(255, 40, 40, 0.7),
+    inset 0 1px 2px rgba(255, 255, 255, 0.6);
+}
+
+.arcade-coin-btn:active {
+  transform: translateY(3px);
+  box-shadow: 
+    0 1px 0 #500404,
+    0 0 15px rgba(255, 0, 0, 0.5);
+}
+
+.coin-slot-icon {
+  width: 5px;
+  height: 18px;
+  background: #110202;
+  border: 1px solid #ff9999;
+  border-radius: 2px;
+}
+
+.credit-counter {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: #0e0404;
+  border: 2px solid #3d1414;
+  border-radius: 6px;
+  padding: 6px 14px;
+  box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.9);
+}
+
+.credit-title {
+  font-size: 8px;
+  color: #885555;
+  letter-spacing: 1px;
+}
+
+.credit-number {
+  font-family: 'Orbitron', monospace;
+  font-size: 20px;
+  font-weight: 900;
+  color: #ff3344;
+  text-shadow: 0 0 10px rgba(255, 50, 60, 0.8);
+}
+
+/* Action Buttons Grid */
+.action-buttons-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.arcade-action-btn {
+  position: relative;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 14px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  letter-spacing: 1px;
+  text-align: center;
+  transition: all 0.1s ease;
+  overflow: hidden;
+}
+
+.btn-start {
+  background: linear-gradient(180deg, #f5c400 0%, #997000 100%);
+  border: 2px solid #ffea78;
+  color: #000;
+  box-shadow: 
+    0 4px 0 #594000,
+    0 0 22px rgba(255, 200, 0, 0.45),
+    inset 0 1px 1px rgba(255, 255, 255, 0.7);
+  animation: pulse-glow-start 2.2s infinite ease-in-out;
+}
+
+.btn-start:hover {
+  background: linear-gradient(180deg, #ffdc33 0%, #b38400 100%);
+}
+
+.btn-start:active {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 #594000;
+}
+
+@keyframes pulse-glow-start {
+  0%, 100% { box-shadow: 0 4px 0 #594000, 0 0 18px rgba(255, 200, 0, 0.4); }
+  50% { box-shadow: 0 4px 0 #594000, 0 0 32px rgba(255, 220, 0, 0.85); }
+}
+
+.btn-lock {
+  background: linear-gradient(180deg, #0099cc 0%, #004d66 100%);
+  border: 2px solid #4de2ff;
+  color: #fff;
+  box-shadow: 
+    0 4px 0 #002c3a,
+    0 0 20px rgba(0, 200, 255, 0.4),
+    inset 0 1px 1px rgba(255, 255, 255, 0.5);
+}
+
+.btn-lock:hover {
+  background: linear-gradient(180deg, #00bfff 0%, #006688 100%);
+}
+
+.btn-lock:active {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 #002c3a;
+}
+
+.btn-lock.locked {
+  background: linear-gradient(180deg, #00cc44 0%, #006622 100%);
+  border-color: #66ff88;
+  box-shadow: 0 4px 0 #003311, 0 0 20px rgba(0, 255, 100, 0.45);
+}
+
+/* Tactical Action Buttons Row */
+.tactical-buttons-row {
+  display: grid;
+  grid-template-columns: 1fr 1.3fr 1fr;
+  gap: 8px;
+}
+
+.arcade-tactical-btn {
+  border-radius: 28px;
+  padding: 10px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.1s ease;
+}
+
+.btn-fire {
+  background: linear-gradient(180deg, #e62e00 0%, #801a00 100%);
+  border: 2px solid #ff6633;
+  color: #fff;
+  box-shadow: 0 4px 0 #4d1000, 0 0 18px rgba(255, 60, 0, 0.35);
+}
+
+.btn-fire:active {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 #4d1000;
+}
+
+.btn-zap {
+  background: linear-gradient(180deg, #0066cc 0%, #003366 100%);
+  border: 2px solid #3399ff;
+  color: #fff;
+  box-shadow: 0 4px 0 #001a33, 0 0 18px rgba(0, 150, 255, 0.35);
+}
+
+.btn-zap:active {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 #001a33;
+}
+
+.btn-warp {
+  background: linear-gradient(180deg, #7700cc 0%, #3d0066 100%);
+  border: 2px solid #b366ff;
+  color: #fff;
+  box-shadow: 0 4px 0 #1f0033, 0 0 18px rgba(180, 0, 255, 0.35);
+}
+
+.btn-warp:active {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 #1f0033;
+}
+
+.tactical-label {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1px;
+}
+
+.tactical-key {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 8px;
+  opacity: 0.8;
+  margin-top: 3px;
+}
+
+/* Steering Mode & Calibration Panel */
+.steering-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 10px 12px;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(0, 229, 255, 0.2);
+  border-radius: 6px;
+}
+
+.steering-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.steering-title {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 8px;
+  color: #00e5ff;
+  letter-spacing: 0.5px;
+}
+
+.steering-modes-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 6px;
+}
+
+.mode-btn {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 9px;
+  font-weight: 800;
+  padding: 7px 4px;
+  border-radius: 4px;
+  cursor: pointer;
+  border: 1px solid #1a2942;
+  background: #0d1522;
+  color: #6d8ba6;
+  text-align: center;
+  transition: all 0.15s ease;
+}
+
+.mode-btn:hover {
+  background: #142033;
+  color: #a4c9eb;
+  border-color: #00e5ff;
+}
+
+.mode-btn.active {
+  background: linear-gradient(180deg, #007799 0%, #004455 100%);
+  border: 1px solid #00e5ff;
+  color: #ffffff;
+  box-shadow: 0 0 10px rgba(0, 229, 255, 0.45);
+}
+
+.steering-hint {
+  font-size: 9.5px;
+  line-height: 1.35;
+  color: #8fa0b5;
+  margin-top: 2px;
+}
+
+.steering-hint strong {
+  color: #ffff00;
+}
+
+/* Bezel Scoring & Lore Card */
+.bezel-scoring-card, .instructions-card {
+  background: #070a10;
+  border: 1px solid #1a2538;
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+
+.card-title {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  color: #00e5ff;
+  margin-bottom: 12px;
+  text-transform: uppercase;
+  border-bottom: 1px solid #162030;
+  padding-bottom: 6px;
+}
+
+/* Leaderboard Hall of Fame Table */
+.leaderboard-table {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 10px;
+}
+
+.leaderboard-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 10px;
+  background: rgba(14, 20, 30, 0.5);
+  border-radius: 4px;
+  border-left: 3px solid #203045;
+  color: #e0e8f0;
+}
+
+.leaderboard-row.rank-1 {
+  border-left-color: #00e5ff;
+  background: rgba(0, 229, 255, 0.1);
+  color: #00e5ff;
+  text-shadow: 0 0 8px rgba(0, 229, 255, 0.5);
+}
+
+.leaderboard-row.rank-2 {
+  border-left-color: #ffff00;
+  color: #ffff00;
+}
+
+.leaderboard-row.rank-3 {
+  border-left-color: #ffaa00;
+  color: #ffaa00;
+}
+
+.leaderboard-rank {
+  width: 32px;
+  opacity: 0.8;
+}
+
+.leaderboard-initials {
+  width: 50px;
+  letter-spacing: 2px;
+  font-weight: bold;
+}
+
+.leaderboard-score {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.scoring-table {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.scoring-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 6px 4px;
+  border-radius: 6px;
+  background: rgba(14, 20, 30, 0.4);
+}
+
+.enemy-icon-col {
+  width: 42px;
+  height: 42px;
+  flex-shrink: 0;
+  background: #020408;
+  border: 1px solid #1a2538;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.vector-icon {
+  width: 32px;
+  height: 32px;
+}
+
+.enemy-info-col {
+  flex: 1;
+}
+
+.enemy-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 3px;
+}
+
+.enemy-name {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1px;
+}
+
+.enemy-pts {
+  font-size: 8px;
+  color: #ffea78;
+}
+
+.enemy-desc {
+  font-size: 8px;
+  color: #8b9bb4;
+  line-height: 1.4;
+  margin: 0;
+}
+
+/* Instructions List */
+.instructions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.instruction-item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-size: 8px;
+  padding: 4px 0;
+  border-bottom: 1px dashed #141c28;
+}
+
+.key-tag {
+  color: #00ffaa;
+  font-weight: bold;
+}
+
+.action-tag {
+  color: #b0c0d8;
+  text-align: right;
+}
+
+/* Cabinet Footer */
+.cabinet-footer {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 10px;
+}
+
+.speaker-grille {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0 10px;
+}
+
+.speaker-grille span {
+  display: block;
+  height: 3px;
+  background: #0a0d14;
+  border-bottom: 1px solid #1a2538;
+  border-radius: 2px;
+}
+
+.serial-plate {
+  font-size: 7px;
+  color: #4a5870;
+  text-align: center;
+  letter-spacing: 0.5px;
+}
+
+/* ==========================================================================
+   RIGHT PANEL: Maximized Full-Bleed 100vh Tempest Vector Screen
+   ========================================================================== */
+#game-stage {
+  flex: 1 1 auto;
+  height: 100vh;
+  position: relative;
+  background: #000000;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#game-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  cursor: crosshair;
+  outline: none;
+}
+
+
+.crt-glow {
+  pointer-events: none;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(circle at center, rgba(0, 220, 255, 0.02) 0%, rgba(0, 0, 0, 0) 80%);
+  z-index: 4;
+}
+
+/* Responsive fallback for smaller screens */
+@media (max-width: 900px) {
+  #arcade-app {
+    flex-direction: column;
+  }
+  #arcade-sidebar {
+    max-width: 100%;
+    height: auto;
+    max-height: 45vh;
+  }
+  #game-stage {
+    height: 55vh;
+    max-width: 100%;
+  }
+}

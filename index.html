@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TEMPEST</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Orbitron:wght@600;800;900&display=swap"
+    rel="stylesheet">
+</head>
+
+<body>
+  <div id="arcade-app">
+    <!-- LEFT PANEL: Authentic Arcade Bezel Artwork, Scoring Table & Control Panel -->
+    <aside id="arcade-sidebar">
+
+      <!-- Arcade Marquee Header Artwork -->
+      <header class="marquee-card marquee-art-card">
+        <img src="images/tempest-header-opt.png" alt="ATARI TEMPEST QuadraScan Color Vector 1981"
+          class="marquee-header-img" width="900" height="303">
+      </header>
+
+      <!-- Interactive Arcade Coin & Start Controls -->
+      <section class="control-panel-card">
+        <div class="coin-door-row">
+          <button id="coin-button" class="arcade-coin-btn" tabindex="-1" title="Click to Insert Coin">
+            <span class="coin-slot-icon"></span>
+            <span class="coin-label">INSERT 25&cent; COIN</span>
+          </button>
+          <div class="credit-counter">
+            <span class="credit-title">CREDITS</span>
+            <span id="credits-val" class="credit-number">01</span>
+          </div>
+        </div>
+
+        <div class="action-buttons-grid">
+          <button id="start-button" class="arcade-action-btn btn-start" tabindex="-1">
+            <span class="btn-glow"></span>
+            <span class="btn-text">1 PLAYER START</span>
+          </button>
+          <button id="lock-button" class="arcade-action-btn btn-lock" tabindex="-1">
+            <span class="btn-glow"></span>
+            <span id="lock-status-text" class="btn-text">SPINNER: UNLOCKED</span>
+          </button>
+        </div>
+
+        <div class="tactical-buttons-row">
+          <button id="fire-button" class="arcade-tactical-btn btn-fire" tabindex="-1">
+            <span class="tactical-label">FIRE</span>
+            <span class="tactical-key">[SPACE]</span>
+          </button>
+          <button id="zap-button" class="arcade-tactical-btn btn-zap" tabindex="-1">
+            <span class="tactical-label">SUPER ZAPPER</span>
+            <span class="tactical-key">[Z]</span>
+          </button>
+          <button id="warp-button" class="arcade-tactical-btn btn-warp" tabindex="-1" title="Warp to Next Level">
+            <span class="tactical-label">WARP</span>
+            <span class="tactical-key">[W]</span>
+          </button>
+        </div>
+
+        <!-- Steering Mode & Sensitivity Selector -->
+        <div class="steering-panel">
+          <div class="steering-header">
+            <span class="steering-title">STEERING CALIBRATION</span>
+          </div>
+          <div class="steering-modes-row">
+            <button id="mode-precision" class="mode-btn active" tabindex="-1"
+              title="Calm, steady step rate. Taps never repeat. Zero overshoot!">PRECISION</button>
+            <button id="mode-tap" class="mode-btn" tabindex="-1"
+              title="Zero auto-repeat! 1 tap = 1 lane. Physically impossible to overshoot.">TAP ONLY</button>
+            <button id="mode-fast" class="mode-btn" tabindex="-1"
+              title="Fast arcade repeat rate for quick spinning.">FAST</button>
+          </div>
+          <div class="steering-hint">
+            💡 TIP: Move mouse cursor over screen to <strong>Direct-Aim</strong> at any enemy, or use <strong>Trackpad
+              Scroll Wheel</strong>!
+          </div>
+        </div>
+      </section>
+
+      <!-- Authentic Arcade Bezel Scoring & Enemy Lore Table -->
+      <section class="bezel-scoring-card">
+        <h2 class="card-title">ENEMY IDENTIFICATION &amp; SCORING</h2>
+        <div class="scoring-table">
+
+          <div class="scoring-row">
+            <div class="enemy-icon-col">
+              <svg class="vector-icon" viewBox="0 0 40 40">
+                <path d="M5,20 L15,10 L25,30 L35,20 M20,5 L20,35" stroke="#00e5ff" stroke-width="2.5" fill="none"
+                  stroke-linecap="round" />
+              </svg>
+            </div>
+            <div class="enemy-info-col">
+              <div class="enemy-header">
+                <span class="enemy-name" style="color: #00e5ff;">FUSEBALL</span>
+                <span class="enemy-pts">250 &bull; 500 &bull; 750 PTS</span>
+              </div>
+              <p class="enemy-desc">Zips unpredictably up and down lane boundaries. Very fast!</p>
+            </div>
+          </div>
+
+          <div class="scoring-row">
+            <div class="enemy-icon-col">
+              <svg class="vector-icon" viewBox="0 0 40 40">
+                <path d="M4,20 L10,8 L16,32 L22,8 L28,32 L34,8 L38,20" stroke="#ffff00" stroke-width="2.5" fill="none"
+                  stroke-linecap="round" />
+              </svg>
+            </div>
+            <div class="enemy-info-col">
+              <div class="enemy-header">
+                <span class="enemy-name" style="color: #ffff00;">PULSARS</span>
+                <span class="enemy-pts">200 PTS</span>
+              </div>
+              <p class="enemy-desc">Electrifies and pulsates entire adjacent lanes. EXTREMELY DEADLY!</p>
+            </div>
+          </div>
+
+          <div class="scoring-row">
+            <div class="enemy-icon-col">
+              <svg class="vector-icon" viewBox="0 0 40 40">
+                <!-- Authentic INVA1S Bowtie -->
+                <path d="M4,12 L20,18 L36,12 L29,20 L33,28 L20,20 L7,28 L11,20 Z" stroke="#ff0000" stroke-width="2.2"
+                  fill="none" stroke-linejoin="round" />
+              </svg>
+            </div>
+            <div class="enemy-info-col">
+              <div class="enemy-header">
+                <span class="enemy-name" style="color: #ff0000;">FLIPPERS</span>
+                <span class="enemy-pts">150 PTS</span>
+              </div>
+              <p class="enemy-desc">Cartwheels between lanes and crawls around outer rim to capture your claw.</p>
+            </div>
+          </div>
+
+          <div class="scoring-row">
+            <div class="enemy-icon-col">
+              <svg class="vector-icon" viewBox="0 0 40 40">
+                <polygon points="20,6 34,20 20,34 6,20" stroke="#cc00ff" stroke-width="2.2" fill="none" />
+                <line x1="20" y1="12" x2="20" y2="28" stroke="#cc00ff" stroke-width="2" />
+                <line x1="12" y1="20" x2="28" y2="20" stroke="#cc00ff" stroke-width="2" />
+              </svg>
+            </div>
+            <div class="enemy-info-col">
+              <div class="enemy-header">
+                <span class="enemy-name" style="color: #cc00ff;">TANKERS</span>
+                <span class="enemy-pts">100 PTS</span>
+              </div>
+              <p class="enemy-desc">Ascending diamond pods. Splinters into two aggressive Flippers when blasted.</p>
+            </div>
+          </div>
+
+          <div class="scoring-row">
+            <div class="enemy-icon-col">
+              <svg class="vector-icon" viewBox="0 0 40 40">
+                <path d="M20,20 m-1,0 a1,1 0 1,0 2,0 a2,2 0 1,0 -4,0 a4,4 0 1,0 8,0 a7,7 0 1,0 -14,0 a10,10 0 1,0 20,0"
+                  stroke="#00ff00" stroke-width="2.2" fill="none" />
+              </svg>
+            </div>
+            <div class="enemy-info-col">
+              <div class="enemy-header">
+                <span class="enemy-name" style="color: #00ff00;">SPIKERS</span>
+                <span class="enemy-pts">50 PTS</span>
+              </div>
+              <p class="enemy-desc">Spins outward laying green spikes down lanes. Blaster lasers can shave spikes.</p>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- Authentic High Scores Table Card -->
+      <section class="bezel-scoring-card leaderboard-card">
+        <h2 class="card-title">HALL OF FAME &bull; TOP SCORES</h2>
+        <div id="high-score-list" class="leaderboard-table">
+          <!-- Dynamically populated from game.js -->
+        </div>
+      </section>
+
+      <!-- Hardware & Controls Instructions -->
+      <section class="instructions-card">
+        <h2 class="card-title">ARCADE ROTARY CONTROLS</h2>
+        <div class="instructions-list">
+          <div class="instruction-item">
+            <span class="key-tag">MOUSE HOVER</span>
+            <span class="action-tag">Direct Radial Aim (Zero Overshoot)</span>
+          </div>
+          <div class="instruction-item">
+            <span class="key-tag">TWO-FINGER SCROLL</span>
+            <span class="action-tag">Trackpad / Wheel Rotary Clicker</span>
+          </div>
+          <div class="instruction-item">
+            <span class="key-tag">&larr; / &rarr; ARROWS</span>
+            <span class="action-tag">Precision Lane Steer (A / D)</span>
+          </div>
+          <div class="instruction-item">
+            <span class="key-tag">SPACEBAR / L-CLICK</span>
+            <span class="action-tag">Rapid Blaster Lasers</span>
+          </div>
+          <div class="instruction-item">
+            <span class="key-tag">Z / R-CLICK</span>
+            <span class="action-tag">Superzapper Smart Bomb (2x / Wave)</span>
+          </div>
+          <div class="instruction-item">
+            <span class="key-tag">SPINNER LOCK</span>
+            <span class="action-tag">Click to Toggle Pointer Lock</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Cabinet Footer Plate -->
+      <footer class="cabinet-footer">
+        <div class="speaker-grille">
+          <span></span><span></span><span></span><span></span><span></span>
+        </div>
+        <div class="serial-plate">
+          ATARI COIN-OP NO. 04812 &bull; DESIGNED BY DAVE THEURER &bull; 1981
+        </div>
+      </footer>
+
+    </aside>
+
+    <!-- RIGHT PANEL: Maximized Full-Bleed 100vh Tempest Vector Screen -->
+    <main id="game-stage">
+      <canvas id="game-canvas" tabindex="0"></canvas>
+      <div class="crt-glow"></div>
+    </main>
+  </div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+
+</html>

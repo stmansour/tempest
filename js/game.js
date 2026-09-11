@@ -1,0 +1,682 @@
+/**
+ * game.js - Tempest Game State Machine & Rules Engine
+ * 
+ * Manages game progression:
+ * - ATTRACT: Authentic 3D TEMPEST Rainbow Cascade Vector Logo, Fuji Logo, Coin Prompt
+ * - PLAYING: Fast responsive vector combat, continuous tactical audio pulsation
+ * - LEVEL_WARP: End-of-level tube dive sequence
+ * - PLAYER_DYING: Vector explosion, life deduction
+ * - GAME_OVER: High score recording, return to attract
+ */
+
+import { createLevelWeb } from './web.js';
+import { Player } from './player.js';
+import { EnemyManager } from './enemies.js';
+
+export const GameState = {
+  ATTRACT: 'ATTRACT',
+  RATE_YOURSELF: 'RATE_YOURSELF',
+  PLAYING: 'PLAYING',
+  LEVEL_WARP: 'LEVEL_WARP',
+  PLAYER_DYING: 'PLAYER_DYING',
+  GAME_OVER: 'GAME_OVER',
+  ENTER_INITIALS: 'ENTER_INITIALS',
+  HIGH_SCORES: 'HIGH_SCORES'
+};
+
+export const RATE_YOURSELF_TIERS = [
+  { level: 1, wellId: 0,  bonus: 0,     label: 'NOVICE' },
+  { level: 3, wellId: 2,  bonus: 6000,  label: '' },
+  { level: 5, wellId: 4,  bonus: 16000, label: '' },
+  { level: 7, wellId: 6,  bonus: 32000, label: '' },
+  { level: 9, wellId: 13, bonus: 54000, label: 'EXPERT' }
+];
+
+export const DEFAULT_HIGH_SCORES = [
+  { score: 192689, initials: 'BVD' }, // Top flyer score
+  { score: 154200, initials: 'DFT' }, // Dave Theurer
+  { score: 121850, initials: 'MH ' }, // Morgan Hoff
+  { score: 98400,  initials: 'PJM' },
+  { score: 75100,  initials: 'HEB' },
+  { score: 52000,  initials: 'LDS' },
+  { score: 35400,  initials: 'RRR' },
+  { score: 20000,  initials: 'DJE' }
+];
+
+export class Game {
+  constructor(renderer, audio, input) {
+    this.renderer = renderer;
+    this.audio = audio;
+    this.input = input;
+
+    this.state = GameState.ATTRACT;
+    this.level = 1;
+    this.score = 0;
+
+    // Load High Scores & Top Initials
+    this.highScores = this._loadHighScores();
+    this.highScore = this.highScores[0].score;
+    this.highScoreInitials = this.highScores[0].initials;
+
+    this.lives = 3;
+
+    // Initial web (Level 1: Circle Tube)
+    this.web = createLevelWeb(this.level);
+    this.player = new Player(this.web);
+    this.enemies = new EnemyManager(this.web);
+
+    this.stateTimer = 0;
+    this.totalTime = 0;
+    this.warpZ = 1.0;
+    this.nextWeb = null;
+    this.superzapperNoticeTimer = 0;
+
+    // High Score Initials Entry State
+    this.initialsState = null;
+
+    // Rate Yourself Startup Skill Selection State
+    this.rateYourselfState = {
+      selectedIndex: 0,
+      timer: 10.0,
+      tiers: RATE_YOURSELF_TIERS
+    };
+
+    // Immediate input handlers for zero-millisecond hardware reaction
+    this.bufferedFireOnSpawn = false;
+
+    this.input.onImmediateStep = (delta) => {
+      const canMove = (this.state === GameState.PLAYING || 
+                      (this.state === GameState.LEVEL_WARP && this.stateTimer < 2.4));
+      if (canMove && this.player.isAlive) {
+        this.player.move(delta, this.audio);
+      } else if (this.state === GameState.ENTER_INITIALS) {
+        this._cycleInitialLetter(delta > 0 ? 1 : -1);
+      }
+    };
+
+    this.input.onImmediateFire = () => {
+      const canFire = (this.state === GameState.PLAYING || 
+                      (this.state === GameState.LEVEL_WARP && this.stateTimer < 2.4));
+      if (canFire && this.player.isAlive) {
+        if (this.state === GameState.PLAYING) {
+          this.enemies.checkImmediateShotHit(this.player.lane, this.audio, (pts) => this.addScore(pts));
+        }
+        this.player.fire(this.audio);
+      } else if (this.state === GameState.PLAYER_DYING) {
+        // Player drumming fire while respawning: buffer to fire immediately on spawn!
+        this.bufferedFireOnSpawn = true;
+      } else if (this.state === GameState.ATTRACT) {
+        this.showRateYourself();
+      } else if (this.state === GameState.RATE_YOURSELF) {
+        this._commitRateYourself();
+      } else if (this.state === GameState.ENTER_INITIALS) {
+        this._commitInitialLetter();
+      }
+    };
+
+    this.input.onImmediateAim = (screenX, screenY) => {
+      const canAim = (this.state === GameState.PLAYING || 
+                     (this.state === GameState.LEVEL_WARP && this.stateTimer < 2.4));
+      if (canAim && this.player.isAlive && !this.input.isLocked) {
+        const targetLane = this.renderer.getLaneAtScreenPos(screenX, screenY, this.web);
+        if (targetLane !== null && targetLane !== undefined) {
+          this.player.setLane(targetLane, this.audio);
+        }
+      }
+    };
+
+    // Keyboard input hook for typing initials directly or navigating Rate Yourself
+    this.input.onKeyDown = (e) => {
+      if (this.state === GameState.RATE_YOURSELF) {
+        if (e.code === 'ArrowLeft' || e.code === 'KeyA') {
+          this._stepRateYourself(-1);
+        } else if (e.code === 'ArrowRight' || e.code === 'KeyD') {
+          this._stepRateYourself(1);
+        } else if (e.code === 'Enter' || e.code === 'Space' || e.code === 'Digit1') {
+          this._commitRateYourself();
+        }
+      } else if (this.state === GameState.ATTRACT) {
+        if (e.code === 'Space' || e.code === 'Enter' || e.code === 'Digit1') {
+          this.showRateYourself();
+        }
+      } else if (this.state === GameState.ENTER_INITIALS && this.initialsState) {
+        if (e.code === 'ArrowLeft' || e.code === 'KeyA') {
+          this._cycleInitialLetter(-1);
+        } else if (e.code === 'ArrowRight' || e.code === 'KeyD') {
+          this._cycleInitialLetter(1);
+        } else if (e.code === 'Enter' || e.code === 'Space') {
+          this._commitInitialLetter();
+        } else if (e.code === 'Backspace') {
+          if (this.initialsState.currentIndex > 0) {
+            this.initialsState.currentIndex--;
+            if (this.audio && this.audio.playLetterCycle) this.audio.playLetterCycle();
+          }
+        } else if (e.key && e.key.length === 1 && /[a-zA-Z0-9 ]/.test(e.key)) {
+          this.initialsState.letters[this.initialsState.currentIndex] = e.key.toUpperCase();
+          this._commitInitialLetter();
+        }
+      }
+    };
+
+    // Populate sidebar leaderboard
+    this._updateSidebarLeaderboard();
+  }
+
+  _loadHighScores() {
+    try {
+      const saved = localStorage.getItem('tempest_highscores');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    } catch (e) {
+      // Ignore
+    }
+    return [...DEFAULT_HIGH_SCORES];
+  }
+
+  _saveHighScores() {
+    try {
+      localStorage.setItem('tempest_highscores', JSON.stringify(this.highScores));
+      localStorage.setItem('tempest_highscore', String(this.highScores[0].score));
+    } catch (e) {
+      // Ignore
+    }
+    this._updateSidebarLeaderboard();
+  }
+
+  _qualifiesForHighScore(score) {
+    if (score <= 0) return false;
+    if (this.highScores.length < 8) return true;
+    return score > this.highScores[this.highScores.length - 1].score;
+  }
+
+  _recordHighScore(initials, score) {
+    const cleanInitials = (initials || 'AAA').toUpperCase().slice(0, 3).padEnd(3, ' ');
+    this.highScores.push({ score, initials: cleanInitials });
+    this.highScores.sort((a, b) => b.score - a.score);
+    this.highScores = this.highScores.slice(0, 8);
+    this.highScore = this.highScores[0].score;
+    this.highScoreInitials = this.highScores[0].initials;
+    this._saveHighScores();
+  }
+
+  _updateSidebarLeaderboard() {
+    const el = document.getElementById('high-score-list');
+    if (!el) return;
+    el.innerHTML = this.highScores.slice(0, 8).map((entry, idx) => {
+      const rank = (idx === 0) ? '1ST' : (idx === 1) ? '2ND' : (idx === 2) ? '3RD' : `${idx + 1}TH`;
+      const rankClass = (idx < 3) ? ` rank-${idx + 1}` : '';
+      return `
+        <div class="leaderboard-row${rankClass}">
+          <span class="leaderboard-rank">${rank}</span>
+          <span class="leaderboard-initials">${entry.initials}</span>
+          <span class="leaderboard-score">${String(entry.score).padStart(6, '0')}</span>
+        </div>
+      `;
+    }).join('');
+  }
+
+  _cycleInitialLetter(dir) {
+    if (!this.initialsState) return;
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ 0123456789';
+    const cur = this.initialsState.letters[this.initialsState.currentIndex] || 'A';
+    let idx = chars.indexOf(cur);
+    if (idx === -1) idx = 0;
+    idx = (idx + dir + chars.length) % chars.length;
+    this.initialsState.letters[this.initialsState.currentIndex] = chars[idx];
+    if (this.audio && this.audio.playLetterCycle) {
+      this.audio.playLetterCycle();
+    }
+  }
+
+  _commitInitialLetter() {
+    if (!this.initialsState) return;
+    if (this.audio && this.audio.playLetterCommit) {
+      this.audio.playLetterCommit();
+    }
+    this.initialsState.currentIndex++;
+    if (this.initialsState.currentIndex >= 3) {
+      const initials = this.initialsState.letters.join('');
+      this._recordHighScore(initials, this.initialsState.score);
+      this.state = GameState.HIGH_SCORES;
+      this.stateTimer = 5.0; // Display high score table for 5s then return to attract
+      if (this.audio && this.audio.playHighScoreFanfare) {
+        this.audio.playHighScoreFanfare();
+      }
+    }
+  }
+
+  showRateYourself() {
+    this.state = GameState.RATE_YOURSELF;
+    this.rateYourselfState.selectedIndex = 0;
+    this.rateYourselfState.timer = 10.0;
+    if (this.audio) this.audio.resume();
+  }
+
+  _stepRateYourself(dir) {
+    const prev = this.rateYourselfState.selectedIndex;
+    const maxIdx = this.rateYourselfState.tiers.length - 1;
+    this.rateYourselfState.selectedIndex = Math.max(0, Math.min(maxIdx, prev + dir));
+    if (this.rateYourselfState.selectedIndex !== prev && this.audio && this.audio.playLetterCycle) {
+      this.audio.playLetterCycle();
+    }
+  }
+
+  _commitRateYourself() {
+    const tier = this.rateYourselfState.tiers[this.rateYourselfState.selectedIndex];
+    this.startNewGame(tier.level, tier.bonus);
+  }
+
+  _updateRateYourself(dt) {
+    this.rateYourselfState.timer -= dt;
+
+    const delta = this.input.consumeLaneDelta();
+    if (delta !== 0) {
+      this._stepRateYourself(delta > 0 ? 1 : -1);
+    }
+
+    if (this.input.consumeFire() || this.rateYourselfState.timer <= 0) {
+      this._commitRateYourself();
+    }
+  }
+
+  startNewGame(startingLevel = 1, startingBonus = 0) {
+    this.score = startingBonus;
+    this.lives = 3;
+    this.level = startingLevel;
+    this.web = createLevelWeb(this.level);
+    this.player.resetForLevel(this.web);
+    this.enemies.resetForLevel(this.web, this.level);
+    this.state = GameState.PLAYING;
+    this.stateTimer = 0;
+    this.superzapperNoticeTimer = 2.8;
+
+    this.audio.resume();
+    this.audio.startPulsation();
+  }
+
+  addScore(pts) {
+    this.score += pts;
+    if (this.score > this.highScore) {
+      this.highScore = this.score;
+    }
+  }
+
+  update(dt) {
+    this.totalTime += dt;
+    this.input.update(dt);
+
+    switch (this.state) {
+      case GameState.ATTRACT:
+        this._updateAttract(dt);
+        break;
+      case GameState.RATE_YOURSELF:
+        this._updateRateYourself(dt);
+        break;
+      case GameState.PLAYING:
+        this._updatePlaying(dt);
+        break;
+      case GameState.LEVEL_WARP:
+        this._updateLevelWarp(dt);
+        break;
+      case GameState.PLAYER_DYING:
+        this._updatePlayerDying(dt);
+        break;
+      case GameState.GAME_OVER:
+        this._updateGameOver(dt);
+        break;
+      case GameState.ENTER_INITIALS:
+        this._updateEnterInitials(dt);
+        break;
+      case GameState.HIGH_SCORES:
+        this._updateHighScores(dt);
+        break;
+    }
+  }
+
+  _updateAttract(dt) {
+    // Animate demo particles or attract sequence
+    this.enemies.update(dt, this.player, null, null);
+  }
+
+  _updatePlaying(dt) {
+    // 1. Process any unconsumed delta movement (rotary spinner, wheel, or repeat)
+    const deltaLane = this.input.consumeLaneDelta();
+    if (deltaLane !== 0) {
+      this.player.move(deltaLane, this.audio);
+    }
+
+    // 2. Primary fire (supports single shots and automatic weapon bursts)
+    if (this.bufferedFireOnSpawn && this.player.isAlive) {
+      this.bufferedFireOnSpawn = false;
+      this.enemies.checkImmediateShotHit(this.player.lane, this.audio, (pts) => this.addScore(pts));
+      this.player.fire(this.audio);
+    } else if (this.input.keys.fire || this.input.consumeFire()) {
+      if (this.player.timeSinceLastShot >= this.player.fireCooldown) {
+        this.enemies.checkImmediateShotHit(this.player.lane, this.audio, (pts) => this.addScore(pts));
+        this.player.fire(this.audio);
+      }
+    }
+
+    // Update Superzapper Notice Timer
+    if (this.superzapperNoticeTimer > 0) {
+      this.superzapperNoticeTimer -= dt;
+    }
+
+    // 3. Superzapper
+    if (this.input.consumeSuperzapper()) {
+      const pts = this.player.useSuperzapper(this.audio, this.enemies);
+      if (pts > 0) this.addScore(pts);
+    }
+
+    // 4. Update player entity
+    this.player.update(dt);
+
+    // Player death check
+    if (!this.player.isAlive) {
+      this.state = GameState.PLAYER_DYING;
+      this.stateTimer = 1.6;
+      this.audio.stopPulsation();
+      return;
+    }
+
+    // 5. Update enemies & collisions
+    this.enemies.update(dt, this.player, this.audio, (pts) => this.addScore(pts));
+
+    // Wave cleared check
+    if (this.enemies.isWaveCleared()) {
+      this.triggerLevelWarp();
+    }
+  }
+
+  /**
+   * Triggers the authentic 2-phase Level Transition:
+   * Phase 1: Tube dive down into current tube; green spikes persist and can kill claw; shots chip spikes
+   * Phase 2: Hyperspace light trail lines; next level shape starts tiny in center and grows to full size
+   */
+  triggerLevelWarp() {
+    if (this.state === GameState.PLAYING) {
+      this.state = GameState.LEVEL_WARP;
+      this.stateTimer = 0;
+      this.warpZ = 1.0;
+      this.nextWeb = createLevelWeb(this.level + 1);
+      this.addScore(1000);
+      this.audio.stopPulsation();
+      this.audio.playLevelWarp();
+    }
+  }
+
+  _updateLevelWarp(dt) {
+    this.stateTimer += dt;
+    const diveDuration = 2.4;
+    const totalWarpDuration = 5.2;
+
+    // Phase 1 (0.0s - 2.4s): Player dives down into the current tube
+    if (this.stateTimer < diveDuration) {
+      this.warpZ = Math.max(0.0, 1.0 - (this.stateTimer / diveDuration));
+      this.player.z = this.warpZ;
+
+      // 1. Player can steer during warp dive!
+      const deltaLane = this.input.consumeLaneDelta();
+      if (deltaLane !== 0) {
+        this.player.move(deltaLane, this.audio);
+      }
+
+      // 2. Player can shoot during warp dive to break down spikes!
+      if (this.input.keys.fire || this.input.consumeFire()) {
+        if (this.player.timeSinceLastShot >= this.player.fireCooldown) {
+          this.player.fire(this.audio);
+        }
+      }
+
+      // 3. Update player entity (shot movement & fire cooldowns)
+      this.player.update(dt);
+
+      // 4. Update shots and check collisions against green spikes
+      for (let i = this.player.shots.length - 1; i >= 0; i--) {
+        const shot = this.player.shots[i];
+        if (!shot.active) continue;
+
+        const spikeZ = this.enemies.spikes.get(shot.lane);
+        if (spikeZ !== undefined && shot.z <= spikeZ) {
+          shot.active = false;
+          const newZ = spikeZ - 0.09;
+          const pt = this.web.getLaneCenter(shot.lane, spikeZ);
+          this.enemies.createExplosion(pt, '#00ff55', 12);
+          if (this.audio) this.audio.playSpikeChip();
+
+          if (newZ <= 0.05) {
+            this.enemies.spikes.delete(shot.lane);
+            this.addScore(10);
+          } else {
+            this.enemies.spikes.set(shot.lane, newZ);
+          }
+        }
+      }
+
+      // 5. Check collision between Player Claw and Spike in player's current lane!
+      const curSpikeZ = this.enemies.spikes.get(this.player.lane);
+      if (curSpikeZ !== undefined && this.player.z <= curSpikeZ + 0.03) {
+        // CLAW HITS SPIKE AND IS KILLED!
+        this.player.kill(this.audio);
+        this.state = GameState.PLAYER_DYING;
+        this.stateTimer = 1.6;
+        this.audio.stopPulsation();
+        return;
+      }
+    } else {
+      // Phase 2 (2.4s - 5.2s): In transit, next level emerges & grows
+      this.warpZ = 0.0;
+      this.player.z = 0.0;
+    }
+
+    // Update particles (e.g. from chipped spikes) during warp transit
+    this.enemies.updateParticlesOnly(dt);
+
+    // Transition complete: lock into next level
+    if (this.stateTimer >= totalWarpDuration) {
+      this.level++;
+      this.web = this.nextWeb || createLevelWeb(this.level);
+      this.nextWeb = null;
+      this.player.resetForLevel(this.web);
+      this.enemies.resetForLevel(this.web, this.level);
+      this.state = GameState.PLAYING;
+      this.superzapperNoticeTimer = 2.8; // Remind player: SUPERZAPPER RECHARGE
+      this.audio.playSlam();
+      this.audio.startPulsation();
+    }
+  }
+
+  _updatePlayerDying(dt) {
+    this.stateTimer -= dt;
+    this.player.update(dt);
+    // Authentic arcade: enemies freeze in place during death explosion, no congregating!
+    this.enemies.updateParticlesOnly(dt);
+
+    if (this.stateTimer <= 0) {
+      this.lives--;
+      if (this.lives > 0) {
+        // Clear any accumulated pending inputs so player doesn't unintentionally move
+        this.input.consumeLaneDelta();
+        // Authentic Atari INEWLI: Find safest cleared lane and reset enemies down the tube
+        const safeLane = this.enemies.findSafeSpawnLane(this.web);
+        this.player.resetForLevel(this.web, safeLane);
+        this.enemies.resetForNewLife(this.web, safeLane);
+        this.state = GameState.PLAYING;
+        this.audio.startPulsation();
+      } else {
+        this.state = GameState.GAME_OVER;
+        this.stateTimer = 3.2;
+      }
+    }
+  }
+
+  _updateGameOver(dt) {
+    this.stateTimer -= dt;
+    this.enemies.update(dt, this.player, null, null);
+    if (this.stateTimer <= 0) {
+      if (this._qualifiesForHighScore(this.score)) {
+        this.state = GameState.ENTER_INITIALS;
+        this.stateTimer = 0;
+        this.initialsState = {
+          letters: ['A', 'A', 'A'],
+          currentIndex: 0,
+          score: this.score
+        };
+        if (this.audio && this.audio.playHighScoreFanfare) {
+          this.audio.playHighScoreFanfare();
+        }
+      } else {
+        this.state = GameState.ATTRACT;
+        const overlay = document.getElementById('ui-overlay');
+        if (overlay) overlay.classList.remove('hidden');
+      }
+    }
+  }
+
+  _updateEnterInitials(dt) {
+    this.stateTimer += dt;
+    // 60-second arcade timeout
+    if (this.stateTimer >= 60) {
+      const initials = (this.initialsState ? this.initialsState.letters.join('') : 'AAA');
+      this._recordHighScore(initials, this.initialsState ? this.initialsState.score : this.score);
+      this.state = GameState.HIGH_SCORES;
+      this.stateTimer = 5.0;
+    }
+  }
+
+  _updateHighScores(dt) {
+    this.stateTimer -= dt;
+    if (this.stateTimer <= 0) {
+      this.state = GameState.ATTRACT;
+      const overlay = document.getElementById('ui-overlay');
+      if (overlay) overlay.classList.remove('hidden');
+    }
+  }
+
+  render() {
+    this.renderer.clear();
+
+    if (this.state === GameState.ATTRACT) {
+      // Authentic Arcade Attract Cycle: Alternate between 3D Rainbow Tempest Logo (8s) and High Scores Table (8s)
+      const cycleTime = Math.floor(this.totalTime / 8.0) % 2;
+      if (cycleTime === 0) {
+        this.renderer.renderTempestRainbowLogo(this.totalTime);
+      } else {
+        this.renderer.renderHighScoresTable(this.highScores, this.totalTime);
+      }
+      return;
+    }
+
+    if (this.state === GameState.HIGH_SCORES) {
+      this.renderer.renderHighScoresTable(this.highScores, this.totalTime);
+      return;
+    }
+
+    if (this.state === GameState.RATE_YOURSELF) {
+      this.renderer.renderRateYourself(this.rateYourselfState);
+      return;
+    }
+
+    if (this.state === GameState.ENTER_INITIALS && this.initialsState) {
+      this.renderer.renderEnterInitials(this.initialsState, this.totalTime);
+      return;
+    }
+
+    // --- Playing / Warp / Dying / Game Over Rendering ---
+
+    if (this.state === GameState.LEVEL_WARP) {
+      // Authentic Two-Phase Level Transition: Seamless Tube Dive -> Next Level Growth
+      this.renderer.renderLevelTransition(
+        this.web,
+        this.nextWeb,
+        this.stateTimer,
+        this.player,
+        this.level + 1,
+        this.enemies
+      );
+    } else {
+      // 1. Render Parametric Web
+      const activeLane = (this.state === GameState.PLAYING) ? this.player.lane : -1;
+      this.renderer.renderWeb(this.web, activeLane);
+
+      // 2. Render Spikes
+      this.renderer.renderSpikes(this.enemies, this.web);
+
+      // 3. Render Abyss Fly Dots buzzing around the faraway hole!
+      this.renderer.renderAbyssFlies(this.enemies.abyssFlies, this.web);
+
+      // 4. Render Spikers, Flippers & Tankers
+      this.renderer.renderSpikers(this.enemies.spikers, this.web);
+      this.renderer.renderFlippers(this.enemies.flippers, this.web);
+      if (this.renderer.renderTankers) {
+        this.renderer.renderTankers(this.enemies.tankers, this.web);
+      }
+
+      // 5. Render Enemy Bullets
+      this.renderer.renderBullets(this.enemies.enemyBullets, this.web);
+
+      // 6. Render Player Shots
+      this.renderer.renderShots(this.player, this.web);
+
+      // 7. Render Player Blaster
+      if (this.state === GameState.PLAYING) {
+        this.renderer.renderBlaster(this.player, this.web);
+      }
+    }
+
+    // 7. Render Particles
+    this.renderer.renderParticles(this.enemies.particles);
+
+    // 8. Superzapper Lightning Effect
+    if (this.player.superzapperActive) {
+      this.renderer.renderSuperzapper(this.player.superzapperTimer / 0.9);
+    }
+
+    // 9. Authentic Vector HUD (with High Score Initials & Skill Level under score)
+    const currentHudLevel = (this.state === GameState.LEVEL_WARP && this.stateTimer >= 2.4) 
+      ? this.level + 1 
+      : this.level;
+
+    this.renderer.renderHUD(
+      this.score,
+      this.highScore,
+      this.highScoreInitials,
+      currentHudLevel,
+      this.lives,
+      this.player.superzapperCharges
+    );
+
+    // 10. SUPERZAPPER RECHARGE Announcement Banner
+    if (this.state === GameState.PLAYING && this.superzapperNoticeTimer > 0) {
+      const alpha = Math.min(1.0, this.superzapperNoticeTimer * 1.5);
+      const pulse = 0.8 + Math.sin(this.totalTime * 12) * 0.2;
+      this.renderer.ctx.save();
+      this.renderer.ctx.globalAlpha = alpha * pulse;
+      this.renderer.drawVectorText(
+        'SUPERZAPPER RECHARGE',
+        this.renderer.viewport.centerX,
+        this.renderer.viewport.y + 110,
+        17,
+        '#00ffff',
+        'center'
+      );
+      this.renderer.ctx.restore();
+    }
+
+    // 11. State Overlays
+    if (this.state === GameState.GAME_OVER) {
+      this.renderer.drawVectorText(
+        'GAME OVER',
+        this.renderer.viewport.centerX,
+        this.renderer.viewport.centerY,
+        22,
+        '#ff2233',
+        'center'
+      );
+    }
+  }
+}
