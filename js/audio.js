@@ -27,6 +27,11 @@ export class AudioManager {
     this.isPulsing = false;
     this.drillOsc = null;
     this.drillGain = null;
+    this.pulsarOsc = null;
+    this.pulsarSubOsc = null;
+    this.pulsarGain = null;
+    this.pulsarFilter = null;
+    this.isPulsarHumming = false;
   }
 
   init() {
@@ -494,30 +499,169 @@ export class AudioManager {
   }
 
   /**
-   * Player Destruction Screech (DI1F from ALSOUN.MAC)
+   * Massive Booming Claw Explosion (DI1F + EX2F Extended)
+   * Deep sub-bass punch, resonant cabinet noise blast, and high-voltage ionization crackle.
    */
-  playPlayerDeath() {
+  playClawExplosion() {
     if (!this.ctx || this.ctx.state !== 'running') return;
     const now = this.ctx.currentTime;
-    const duration = 1.4;
 
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
+    // 1. Heavy Sub-Bass Thud (45Hz downward punch with rapid transient)
+    const subOsc = this.ctx.createOscillator();
+    const subGain = this.ctx.createGain();
+    subOsc.type = 'sine';
+    subOsc.frequency.setValueAtTime(140, now);
+    subOsc.frequency.exponentialRampToValueAtTime(32, now + 0.65);
 
-    osc.type = 'sawtooth';
-    osc.frequency.setValueAtTime(800, now);
-    osc.frequency.exponentialRampToValueAtTime(35, now + duration);
+    subGain.gain.setValueAtTime(0.85, now);
+    subGain.gain.exponentialRampToValueAtTime(0.001, now + 0.7);
 
-    gain.gain.setValueAtTime(0.4, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+    subOsc.connect(subGain);
+    subGain.connect(this.masterGain);
+    subOsc.start(now);
+    subOsc.stop(now + 0.7);
 
-    osc.connect(gain);
-    gain.connect(this.masterGain);
+    // 2. High-Impact Resonant White Noise Blast (analog arcade cabinet distortion)
+    const duration = 1.35;
+    const bufferSize = Math.floor(this.ctx.sampleRate * duration);
+    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.32));
+    }
 
-    osc.start(now);
-    osc.stop(now + duration);
+    const noise = this.ctx.createBufferSource();
+    noise.buffer = buffer;
 
-    this.playExplosion(true);
+    // Dual-stage filter: Lowpass sweep + Resonant cabinet body
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(1400, now);
+    filter.frequency.exponentialRampToValueAtTime(55, now + duration);
+    filter.Q.setValueAtTime(3.5, now);
+
+    const noiseGain = this.ctx.createGain();
+    noiseGain.gain.setValueAtTime(0.75, now);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+    noise.connect(filter);
+    filter.connect(noiseGain);
+    noiseGain.connect(this.masterGain);
+
+    noise.start(now);
+    noise.stop(now + duration);
+
+    // 3. High-Voltage Vector Ionization / Shatter Screech
+    const screechOsc = this.ctx.createOscillator();
+    const screechGain = this.ctx.createGain();
+    screechOsc.type = 'sawtooth';
+    screechOsc.frequency.setValueAtTime(920, now);
+    screechOsc.frequency.exponentialRampToValueAtTime(38, now + 0.9);
+
+    screechGain.gain.setValueAtTime(0.45, now);
+    screechGain.gain.exponentialRampToValueAtTime(0.001, now + 0.9);
+
+    screechOsc.connect(screechGain);
+    screechGain.connect(this.masterGain);
+
+    screechOsc.start(now);
+    screechOsc.stop(now + 0.9);
+  }
+
+  playPlayerDeath() {
+    this.playClawExplosion();
+  }
+
+  /**
+   * Pulsar Electrical Modulation Hum Channel
+   * Rises in volume and pitch as pulsar expands taller; dims as it contracts.
+   */
+  updatePulsarHum(pulsars) {
+    if (!this.ctx || this.ctx.state !== 'running') return;
+    if (!pulsars || pulsars.length === 0) {
+      this.stopPulsarHum();
+      return;
+    }
+
+    // Find highest pulse expansion among all active pulsars (0.0 to 1.0)
+    let maxPulse = 0;
+    for (const p of pulsars) {
+      if (p.pulseHeight > maxPulse) {
+        maxPulse = p.pulseHeight;
+      }
+    }
+
+    const now = this.ctx.currentTime;
+
+    if (!this.isPulsarHumming || !this.pulsarOsc) {
+      try {
+        this.pulsarOsc = this.ctx.createOscillator();
+        this.pulsarSubOsc = this.ctx.createOscillator();
+        this.pulsarGain = this.ctx.createGain();
+        this.pulsarFilter = this.ctx.createBiquadFilter();
+
+        this.pulsarOsc.type = 'triangle';
+        this.pulsarSubOsc.type = 'sawtooth';
+
+        this.pulsarFilter.type = 'lowpass';
+        this.pulsarFilter.frequency.setValueAtTime(260, now);
+        this.pulsarFilter.Q.setValueAtTime(4.0, now);
+
+        this.pulsarGain.gain.setValueAtTime(0.01, now);
+
+        this.pulsarOsc.connect(this.pulsarFilter);
+        this.pulsarSubOsc.connect(this.pulsarFilter);
+        this.pulsarFilter.connect(this.pulsarGain);
+        this.pulsarGain.connect(this.masterGain);
+
+        this.pulsarOsc.start(now);
+        this.pulsarSubOsc.start(now);
+        this.isPulsarHumming = true;
+      } catch (e) {
+        return;
+      }
+    }
+
+    // Modulate pitch and volume based on pulse height
+    // Base frequency 75Hz -> 160Hz, Sub 37.5Hz -> 80Hz
+    const targetFreq = 75 + maxPulse * 85;
+    const targetGain = 0.04 + maxPulse * 0.22;
+
+    this.pulsarOsc.frequency.setTargetAtTime(targetFreq, now, 0.04);
+    this.pulsarSubOsc.frequency.setTargetAtTime(targetFreq * 0.5, now, 0.04);
+    this.pulsarFilter.frequency.setTargetAtTime(180 + maxPulse * 280, now, 0.04);
+    this.pulsarGain.gain.setTargetAtTime(targetGain, now, 0.04);
+  }
+
+  stopPulsarHum() {
+    if (!this.isPulsarHumming) return;
+    if (this.pulsarGain && this.ctx) {
+      try {
+        const now = this.ctx.currentTime;
+        this.pulsarGain.gain.setTargetAtTime(0.001, now, 0.05);
+        setTimeout(() => {
+          if (this.pulsarOsc) {
+            try { this.pulsarOsc.stop(); } catch (e) {}
+            this.pulsarOsc.disconnect();
+            this.pulsarOsc = null;
+          }
+          if (this.pulsarSubOsc) {
+            try { this.pulsarSubOsc.stop(); } catch (e) {}
+            this.pulsarSubOsc.disconnect();
+            this.pulsarSubOsc = null;
+          }
+          if (this.pulsarGain) {
+            this.pulsarGain.disconnect();
+            this.pulsarGain = null;
+          }
+          this.isPulsarHumming = false;
+        }, 80);
+      } catch (e) {
+        this.isPulsarHumming = false;
+      }
+    } else {
+      this.isPulsarHumming = false;
+    }
   }
 
   /**

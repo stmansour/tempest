@@ -150,15 +150,22 @@ export class Player {
     }
   }
 
-  kill(audio) {
+  kill(audio, enemies, web) {
     if (!this.isAlive) return;
     // Spawn grace period protects player from instant spawn-fragging
     if (this.spawnGraceTimer && this.spawnGraceTimer > 0) return;
 
     this.isAlive = false;
     this.deathTimer = 0;
+    if (enemies) {
+      enemies.createClawExplosion(this.lane, this.z, web);
+    }
     if (audio) {
-      audio.playPlayerDeath();
+      if (audio.playClawExplosion) {
+        audio.playClawExplosion();
+      } else {
+        audio.playPlayerDeath();
+      }
     }
   }
 }

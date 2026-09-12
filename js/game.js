@@ -9,9 +9,9 @@
  * - GAME_OVER: High score recording, return to attract
  */
 
-import { createLevelWeb } from './web.js';
-import { Player } from './player.js';
-import { EnemyManager } from './enemies.js';
+import { createLevelWeb, WELL_VISUAL_CENTER_OVERRIDES } from './web.js?v=warp_stage3_unified';
+import { Player } from './player.js?v=warp_stage3_unified';
+import { EnemyManager } from './enemies.js?v=warp_stage3_unified';
 
 export const GameState = {
   ATTRACT: 'ATTRACT',
@@ -411,10 +411,10 @@ export class Game {
 
   _updateLevelWarp(dt) {
     this.stateTimer += dt;
-    const diveDuration = 2.4;
-    const totalWarpDuration = 5.2;
+    const diveDuration = 1.9;
+    const totalWarpDuration = 4.8;
 
-    // Phase 1 (0.0s - 2.4s): Player dives down into the current tube
+    // Phase 1 (0.0s - 1.9s): Player dives down into the current tube
     if (this.stateTimer < diveDuration) {
       this.warpZ = Math.max(0.0, 1.0 - (this.stateTimer / diveDuration));
       this.player.z = this.warpZ;
@@ -445,7 +445,7 @@ export class Game {
           shot.active = false;
           const newZ = spikeZ - 0.09;
           const pt = this.web.getLaneCenter(shot.lane, spikeZ);
-          this.enemies.createExplosion(pt, '#00ff55', 12);
+          this.enemies.createExplosion(pt, '#ffffff', 1, shot.lane, spikeZ);
           if (this.audio) this.audio.playSpikeChip();
 
           if (newZ <= 0.05) {
@@ -459,12 +459,13 @@ export class Game {
 
       // 5. Check collision between Player Claw and Spike in player's current lane!
       const curSpikeZ = this.enemies.spikes.get(this.player.lane);
-      if (curSpikeZ !== undefined && this.player.z <= curSpikeZ + 0.03) {
+      if (!this.godMode && curSpikeZ !== undefined && this.player.z <= curSpikeZ + 0.03) {
         // CLAW HITS SPIKE AND IS KILLED!
-        this.player.kill(this.audio);
+        this.player.kill(this.audio, this.enemies, this.web);
         this.state = GameState.PLAYER_DYING;
         this.stateTimer = 1.6;
         this.audio.stopPulsation();
+        if (this.audio.stopPulsarHum) this.audio.stopPulsarHum();
         return;
       }
     } else {
@@ -609,11 +610,17 @@ export class Game {
       // 3. Render Abyss Fly Dots buzzing around the faraway hole!
       this.renderer.renderAbyssFlies(this.enemies.abyssFlies, this.web);
 
-      // 4. Render Spikers, Flippers & Tankers
+      // 4. Render Spikers, Flippers, Tankers, Pulsars & Fuseballs
       this.renderer.renderSpikers(this.enemies.spikers, this.web);
       this.renderer.renderFlippers(this.enemies.flippers, this.web);
       if (this.renderer.renderTankers) {
         this.renderer.renderTankers(this.enemies.tankers, this.web);
+      }
+      if (this.renderer.renderPulsars) {
+        this.renderer.renderPulsars(this.enemies.pulsars, this.web);
+      }
+      if (this.renderer.renderFuseballs) {
+        this.renderer.renderFuseballs(this.enemies.fuseballs, this.web);
       }
 
       // 5. Render Enemy Bullets
@@ -637,9 +644,8 @@ export class Game {
     }
 
     // 9. Authentic Vector HUD (with High Score Initials & Skill Level under score)
-    const currentHudLevel = (this.state === GameState.LEVEL_WARP && this.stateTimer >= 2.4) 
-      ? this.level + 1 
-      : this.level;
+    const isWarpDeepSpace = (this.state === GameState.LEVEL_WARP && this.stateTimer >= 1.9);
+    const currentHudLevel = isWarpDeepSpace ? this.level + 1 : this.level;
 
     this.renderer.renderHUD(
       this.score,
@@ -647,7 +653,8 @@ export class Game {
       this.highScoreInitials,
       currentHudLevel,
       this.lives,
-      this.player.superzapperCharges
+      this.player.superzapperCharges,
+      isWarpDeepSpace
     );
 
     // 10. SUPERZAPPER RECHARGE Announcement Banner
@@ -659,8 +666,8 @@ export class Game {
       this.renderer.drawVectorText(
         'SUPERZAPPER RECHARGE',
         this.renderer.viewport.centerX,
-        this.renderer.viewport.y + 110,
-        17,
+        this.renderer.viewport.y + 54,
+        13,
         '#00ffff',
         'center'
       );
@@ -677,6 +684,42 @@ export class Game {
         '#ff2233',
         'center'
       );
+    }
+
+    // 12. Visual Vanishing Point Diagnostic Overlay (toggled via 'V' or ?debug=1)
+    if (this.renderer.renderDebugOverlay) {
+      this.renderer.renderDebugOverlay(this.web, this.level);
+    }
+  }
+
+  nudgeVisualCenter(dx, dy) {
+    if (!this.web) return;
+    if (!this.web.visualCenter) this.web.visualCenter = { x: 0, y: 0 };
+    this.web.visualCenter.x = parseFloat((this.web.visualCenter.x + dx).toFixed(1));
+    this.web.visualCenter.y = parseFloat((this.web.visualCenter.y + dy).toFixed(1));
+    WELL_VISUAL_CENTER_OVERRIDES[this.web.id] = { ...this.web.visualCenter };
+    console.log(`[VP OVERRIDE] Level ${this.level} (${this.web.name}, Well ${this.web.id}):`, 
+      `WELL_VISUAL_CENTER_OVERRIDES[${this.web.id}] = { x: ${this.web.visualCenter.x.toFixed(1)}, y: ${this.web.visualCenter.y.toFixed(1)} };`);
+  }
+
+  resetVisualCenter() {
+    if (!this.web) return;
+    delete WELL_VISUAL_CENTER_OVERRIDES[this.web.id];
+    const defaultWeb = createLevelWeb(this.level);
+    this.web.visualCenter = { ...defaultWeb.visualCenter };
+    console.log(`[VP RESET] Level ${this.level} (${this.web.name}) reset to default:`, this.web.visualCenter);
+  }
+
+  printVisualCenterConfig() {
+    if (!this.web) return;
+    const vc = this.web.visualCenter || { x: 0, y: 0 };
+    const code = `WELL_VISUAL_CENTER_OVERRIDES[${this.web.id}] = { x: ${vc.x.toFixed(1)}, y: ${vc.y.toFixed(1)} }; // ${this.web.name}`;
+    console.log(`%c${code}`, 'color: #00ff88; font-weight: bold; font-size: 13px;');
+    try {
+      navigator.clipboard.writeText(code);
+      console.log('(Copied to clipboard!)');
+    } catch (e) {
+      // Ignore
     }
   }
 }

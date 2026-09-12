@@ -51,10 +51,24 @@ export class VectorRenderer {
         width: 1.2 + Math.random() * 1.6
       });
     }
+
+    // Authentic Atari QuadraScan purple/violet/blue space debris pool (Images 4 & 5)
+    this.spaceDebris = [];
+    const debrisColors = ['#9933ff', '#b355ff', '#7722ee', '#5544ff', '#a855f7', '#c084fc', '#6622ee', '#bb77ff', '#ffffff'];
+    for (let i = 0; i < 200; i++) {
+      this.spaceDebris.push({
+        angle: Math.random() * Math.PI * 2,
+        dist: Math.random(),
+        speed: 0.35 + Math.random() * 0.75,
+        color: debrisColors[Math.floor(Math.random() * debrisColors.length)],
+        size: 1.8 + Math.random() * 1.6
+      });
+    }
+    this.showDebugOverlay = false;
   }
 
   /**
-   * Resizes canvas and computes optimal 3:4 portrait arcade viewport
+   * Resizes canvas and computes responsive vector viewport
    */
   resize(width, height) {
     this.screenWidth = width;
@@ -62,35 +76,114 @@ export class VectorRenderer {
     this.canvas.width = width;
     this.canvas.height = height;
 
-    const targetAspect = 3 / 4;
-    let vpW = width;
-    let vpH = height;
-
-    if (vpW / vpH > targetAspect) {
-      vpW = vpH * targetAspect;
-    } else {
-      vpH = vpW / targetAspect;
-    }
-
-    this.viewport.width = vpW;
-    this.viewport.height = vpH;
-    this.viewport.x = (width - vpW) * 0.5;
-    this.viewport.y = (height - vpH) * 0.5;
-    this.viewport.centerX = this.viewport.x + vpW * 0.5;
-    this.viewport.centerY = this.viewport.y + vpH * 0.5;
-
-    // 260 world coordinate units across [-130, +130]
-    this.viewport.scale = vpW / 260;
+    // Viewport coordinates frame the entire screen for HUD and vector layout
+    this.viewport.x = Math.max(20, this.screenWidth * 0.022);
+    this.viewport.width = width - this.viewport.x * 2;
+    this.viewport.centerX = width * 0.5;
+    this.viewport.centerY = height * 0.5;
+    this.viewport.y = 0;
+    this.viewport.height = height;
+    this.viewport.scale = (Math.min(width, height) - 120) / 170.2;
   }
 
   /**
-   * Maps 2D World Coordinates (centered at 0, 0) to Screen Pixel Coordinates
+   * Computes optimal vector screen transform (scaleX, scaleY, centerX, centerY)
+   * Maximizes the playable area by utilizing all available horizontal and vertical screen space
+   * while ensuring safe clearance for the HUD, Superzapper, Player Claw, and Flippers.
    */
-  toScreen(pos) {
+  getWebTransform(web) {
+    if (!web) {
+      return {
+        scaleX: this.viewport.scale,
+        scaleY: this.viewport.scale,
+        scale: this.viewport.scale,
+        centerX: this.viewport.centerX,
+        centerY: this.viewport.centerY
+      };
+    }
+
+    // Check cached transform for current screen dimensions
+    if (web._cachedTransform && 
+        web._cachedTransform.w === this.screenWidth && 
+        web._cachedTransform.h === this.screenHeight) {
+      return web._cachedTransform;
+    }
+
+    // Margins optimized to maximize playable footprint while keeping clean clearance
+    // Top margin: clearance below top HUD (score, life icons, avoid spikes warning)
+    const topMargin = Math.max(68, this.screenHeight * 0.076);
+    // Bottom margin: clearance above bottom Superzapper indicator
+    const bottomMargin = Math.max(40, this.screenHeight * 0.046);
+    // Side margins: clearance for Claw outer shoulder and perimeter-walking Flippers
+    const sideMargin = Math.max(30, this.screenWidth * 0.028);
+
+    const availW = Math.max(200, this.screenWidth - sideMargin * 2);
+    const availH = Math.max(200, this.screenHeight - topMargin - bottomMargin);
+
+    const centerX = this.screenWidth * 0.5;
+    const centerY = topMargin + availH * 0.5;
+
+    const bounds = web.bounds || { width: 170.2, height: 170.2 };
+    const w = Math.max(1, bounds.width);
+    const h = Math.max(1, bounds.height);
+
+    const rawScaleX = availW / w;
+    const rawScaleY = availH / h;
+
+    // Uniform fit scale that fills available space
+    let fitScale = Math.min(rawScaleX, rawScaleY);
+    let scaleX = fitScale;
+    let scaleY = fitScale;
+
+    // For wide/shallow geometries (aspect ratio w/h > 1.3), expand Y perspective depth
+    // to utilize available vertical screen real estate without clipping:
+    const aspect = w / h;
+    if (aspect > 1.35 && rawScaleY > fitScale) {
+      const maxBoost = aspect >= 2.2 ? 1.75 : (aspect >= 1.7 ? 1.35 : 1.20);
+      const depthBoost = Math.min(maxBoost, (availH * 0.88) / (h * fitScale));
+      if (depthBoost > 1.0) {
+        scaleY = fitScale * depthBoost;
+      }
+    }
+
+    const transform = {
+      scaleX,
+      scaleY,
+      scale: fitScale,
+      centerX,
+      centerY,
+      w: this.screenWidth,
+      h: this.screenHeight
+    };
+
+    web._cachedTransform = transform;
+    return transform;
+  }
+
+  /**
+   * Maps 2D World Coordinates to Screen Pixel Coordinates using the active web's optimal transform
+   */
+  toScreen(pos, web = this.activeWeb) {
+    if (web) {
+      const transform = this.getWebTransform(web);
+      return {
+        x: transform.centerX + pos.x * transform.scaleX,
+        y: transform.centerY + pos.y * transform.scaleY
+      };
+    }
     return {
       x: this.viewport.centerX + pos.x * this.viewport.scale,
       y: this.viewport.centerY + pos.y * this.viewport.scale
     };
+  }
+
+  /**
+   * Computes the screen pixel coordinate of the visual center / vanishing point of a web
+   */
+  getWebVisualCenterScreen(web) {
+    if (!web) return { x: this.viewport.centerX, y: this.viewport.centerY };
+    const vc = (typeof web.getVisualCenter === 'function') ? web.getVisualCenter() : { x: 0, y: 0 };
+    return this.toScreen(vc, web);
   }
 
   /**
@@ -99,13 +192,16 @@ export class VectorRenderer {
    */
   getLaneAtScreenPos(screenX, screenY, web) {
     if (!web || web.laneCount <= 0) return 0;
+    this.activeWeb = web;
     const rect = this.canvas.getBoundingClientRect();
     const mx = screenX - rect.left;
     const my = screenY - rect.top;
 
+    const transform = this.getWebTransform(web);
+    const cx = transform.centerX;
+    const cy = transform.centerY;
+
     if (web.isClosed) {
-      const cx = this.viewport.centerX;
-      const cy = this.viewport.centerY;
       const mouseAngle = Math.atan2(my - cy, mx - cx);
 
       let bestLane = 0;
@@ -113,7 +209,7 @@ export class VectorRenderer {
 
       for (let i = 0; i < web.laneCount; i++) {
         const centerPos = web.getLaneCenter(i, 1.0);
-        const pScreen = this.toScreen(centerPos);
+        const pScreen = this.toScreen(centerPos, web);
         const laneAngle = Math.atan2(pScreen.y - cy, pScreen.x - cx);
 
         let diff = Math.abs(mouseAngle - laneAngle);
@@ -131,7 +227,7 @@ export class VectorRenderer {
 
       for (let i = 0; i < web.laneCount; i++) {
         const centerPos = web.getLaneCenter(i, 1.0);
-        const pScreen = this.toScreen(centerPos);
+        const pScreen = this.toScreen(centerPos, web);
         const dSq = (pScreen.x - mx) ** 2 + (pScreen.y - my) ** 2;
         if (dSq < minDistSq) {
           minDistSq = dSq;
@@ -266,11 +362,11 @@ export class VectorRenderer {
     const ctx = this.ctx;
     const centerX = this.viewport.centerX;
 
-    // Authentic arcade geometry:
-    // Center Vanishing Point (CNTR in Atari QuadraScan) at 53% height
-    const vpY = this.viewport.y + this.viewport.height * 0.53;
-    // Front Destination Center at 22% height (generous ~15% top margin, zero clipping!)
-    const targetY = this.viewport.y + this.viewport.height * 0.22;
+    // Play Area Vertical Framing:
+    // Start: smallest print vertical center at 25% up from bottom of play area (75% down)
+    const vpY = this.viewport.y + this.viewport.height * 0.75;
+    // End: vertical center stops at 67% of the height from bottom (33% down from top)
+    const targetY = this.viewport.y + this.viewport.height * 0.33;
     // Full size width spans 72% of viewport width across 1046 stroke units
     const fullScale = (this.viewport.width * 0.72) / 1046;
 
@@ -323,17 +419,18 @@ export class VectorRenderer {
         });
       }
     } else {
-      // Shimmer Hold phase: All layers collapsed at front with QuadraScan electron beam micro-jitter
-      const jitterPasses = 4;
-      for (let p = 0; p < jitterPasses; p++) {
-        layers.push({
-          z: 1.0,
-          isLeading: (p === 0),
-          colorIndex: p % ATARI_PALETTE.length,
-          jitterX: (Math.random() - 0.5) * 0.8,
-          jitterY: (Math.random() - 0.5) * 0.8
-        });
-      }
+      // Hold phase: All layers collapsed at front (z = 1.0)
+      // Smoothly ramp vector stroke thickness from 1x to 2x (pure crisp white letters, no glow, zero jitter)
+      const holdDuration = cycleDuration - 1.7; // 2.1s
+      const holdProgress = Math.min(1.0, (cycleTime - 1.7) / holdDuration);
+      const strokeMultiplier = 1.0 + holdProgress * 1.0; // smoothly scales from 1.0 to 2.0!
+
+      layers.push({
+        z: 1.0,
+        isLeading: true,
+        color: '#ffffff',
+        strokeMultiplier: strokeMultiplier
+      });
     }
 
     // Render layers from back to front with batched GPU vector paths
@@ -342,11 +439,8 @@ export class VectorRenderer {
       // Perspective scale factor: lerps from vanishing point to full size
       const s = fullScale * z;
       // Perspective position: center lerps along perspective ray from vpY to targetY
-      const ly = vpY + (targetY - vpY) * Math.pow(z, 1.25) + (layer.jitterY || 0);
-      const lx = centerX + (layer.jitterX || 0);
-
-      const color = layer.isLeading ? '#ffffff' : ATARI_PALETTE[layer.colorIndex];
-      const strokeW = layer.isLeading ? 2.6 : 1.3;
+      const ly = vpY + (targetY - vpY) * Math.pow(z, 1.25);
+      const lx = centerX;
 
       ctx.save();
       ctx.translate(lx, ly);
@@ -359,17 +453,32 @@ export class VectorRenderer {
         ctx.lineTo(stroke[2], stroke[3]);
       }
 
-      // Pass 1: Soft Phosphor Bloom
-      ctx.strokeStyle = color;
-      ctx.lineWidth = (strokeW * 2.2) / s;
-      ctx.lineCap = 'round';
-      ctx.globalAlpha = layer.isLeading ? 0.35 : 0.18;
-      ctx.stroke();
+      if (layer.isUnderglow) {
+        // Neon color-shifting underglow beneath letters
+        ctx.strokeStyle = layer.color;
+        ctx.lineWidth = (layer.glowWidth * 2.6) / s;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.globalAlpha = layer.glowAlpha;
+        ctx.stroke();
+      } else {
+        const mult = layer.strokeMultiplier || 1.0;
+        const color = layer.isLeading ? '#ffffff' : ATARI_PALETTE[layer.colorIndex];
+        const strokeW = (layer.isLeading ? 2.6 : 1.3) * mult;
 
-      // Pass 2: Intense Saturated Core Vector
-      ctx.lineWidth = strokeW / s;
-      ctx.globalAlpha = 1.0;
-      ctx.stroke();
+        // Pass 1: Soft Phosphor Bloom
+        ctx.strokeStyle = color;
+        ctx.lineWidth = (strokeW * 2.0) / s;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.globalAlpha = layer.isLeading ? 0.35 : 0.18;
+        ctx.stroke();
+
+        // Pass 2: Intense Saturated Core Vector
+        ctx.lineWidth = strokeW / s;
+        ctx.globalAlpha = 1.0;
+        ctx.stroke();
+      }
 
       ctx.restore();
     }
@@ -380,15 +489,19 @@ export class VectorRenderer {
   /**
    * Render the Parametric Web (Outer Rim, Inner Hole, and Radial Ribs)
    */
-  renderWeb(web, playerLane = -1) {
-    const color = web.strokeColor || '#0033ff';
+  /**
+   * Render the Parametric Web (Outer Rim, Inner Hole, and Radial Ribs)
+   */
+  renderWeb(web, playerLane = -1, colorOverride = null) {
+    this.activeWeb = web;
+    const color = colorOverride || web.strokeColor || '#0033ff';
     const vCount = web.vertexCount;
     const lCount = web.laneCount;
 
     // 1. Ribs (connecting hole z=0 to rim z=1)
     for (let i = 0; i < vCount; i++) {
-      const pInner = this.toScreen(web.getVertexPos(i, 0.0));
-      const pOuter = this.toScreen(web.getVertexPos(i, 1.0));
+      const pInner = this.toScreen(web.getVertexPos(i, 0.0), web);
+      const pOuter = this.toScreen(web.getVertexPos(i, 1.0), web);
       
       const isPlayerRib = (playerLane !== -1) && 
         (i === playerLane || i === (playerLane + 1) % vCount);
@@ -401,16 +514,16 @@ export class VectorRenderer {
     // 2. Inner Hole Perimeter
     for (let i = 0; i < lCount; i++) {
       const [v0, v1] = web.getLaneIndices(i);
-      const p0 = this.toScreen(web.getVertexPos(v0, 0.0));
-      const p1 = this.toScreen(web.getVertexPos(v1, 0.0));
+      const p0 = this.toScreen(web.getVertexPos(v0, 0.0), web);
+      const p1 = this.toScreen(web.getVertexPos(v1, 0.0), web);
       this.drawVectorLine(p0.x, p0.y, p1.x, p1.y, color, 1.9, true);
     }
 
     // 3. Outer Rim Perimeter
     for (let i = 0; i < lCount; i++) {
       const [v0, v1] = web.getLaneIndices(i);
-      const p0 = this.toScreen(web.getVertexPos(v0, 1.0));
-      const p1 = this.toScreen(web.getVertexPos(v1, 1.0));
+      const p0 = this.toScreen(web.getVertexPos(v0, 1.0), web);
+      const p1 = this.toScreen(web.getVertexPos(v1, 1.0), web);
 
       const isCurrentLane = (i === playerLane);
       const segColor = isCurrentLane ? '#ffff00' : color;
@@ -435,39 +548,51 @@ export class VectorRenderer {
    * - Announces next level number in vector typography
    */
   renderLevelTransition(currentWeb, nextWeb, stateTimer, player, nextLevelNum, enemies) {
-    const cx = this.viewport.centerX;
-    const cy = this.viewport.centerY;
-    const diveDuration = 2.4;
-    const totalDuration = 5.2;
+    const diveDuration = 1.9;
+    const totalDuration = 4.8;
+
+    // Delta time for smooth space debris advancement
+    const lastT = this._lastWarpTimer !== undefined ? this._lastWarpTimer : stateTimer;
+    const dt = Math.max(0.001, Math.min(0.05, stateTimer - lastT));
+    this._lastWarpTimer = stateTimer;
+
+    const screenCx = this.viewport.centerX || this.screenWidth * 0.5;
+    const screenCy = this.viewport.centerY || this.screenHeight * 0.5;
 
     if (stateTimer < diveDuration) {
       // =========================================================================
-      // PHASE 1: TUBE DIVE INTO HYPERSPACE (0.0s to 2.4s)
-      // Tube shape stays PRECISELY as it is when warp begins!
-      // Green spikes stay in the tube!
-      // Claw Blaster dives towards center hole, shots chip spikes down!
-      // Feels like moving down or through the level into the center
+      // PHASE 1: TUBE DIVE INTO THE ABYSS (0.0s to 1.9s)
+      // Moving the center of the tube shape towards the center of the play area
       // =========================================================================
-      const t = Math.min(1.0, stateTimer / diveDuration);
+      this.activeWeb = currentWeb;
+      const curHole = this.getWebVisualCenterScreen(currentWeb);
+      const hx0 = curHole.x;
+      const hy0 = curHole.y;
 
-      // Subtle physical camera zoom into the center hole as Claw traverses the tube
-      const zoom = 1.0 + t * 0.40;
+      const t = Math.min(1.0, stateTimer / diveDuration);
+      // Smooth interpolation for moving the hole to screen center
+      const moveProgress = Math.pow(t, 1.8);
+      const targetHoleX = hx0 + (screenCx - hx0) * moveProgress;
+      const targetHoleY = hy0 + (screenCy - hy0) * moveProgress;
+
+      // Camera acceleration into the tube hole (zooms up to 4.5x, clipping outer edges)
+      const zoom = 1.0 + Math.pow(t, 2.3) * 3.5;
 
       this.ctx.save();
-      this.ctx.translate(cx, cy);
+      this.ctx.translate(targetHoleX, targetHoleY);
       this.ctx.scale(zoom, zoom);
-      this.ctx.translate(-cx, -cy);
+      this.ctx.translate(-hx0, -hy0);
 
-      // 1. Render Current Tube (no extra rings or popping lines!)
+      // 1. Render Current Tube Web
       const activeLane = player ? player.lane : -1;
       this.renderWeb(currentWeb, activeLane);
 
-      // 2. Render Green Spikes (they MUST remain in the tube during dive!)
+      // 2. Render Green Spikes (persisting in the tube)
       if (enemies) {
         this.renderSpikes(enemies, currentWeb);
       }
 
-      // 3. Render Player Shots racing down the tube
+      // 3. Render Player Shots
       if (player) {
         this.renderShots(player, currentWeb);
       }
@@ -477,98 +602,210 @@ export class VectorRenderer {
         this.renderBlaster(player, currentWeb);
       }
 
-      // 5. Render Chipped Spike / Explosion Particles
+      // 5. Render Chipped Spike / Explosion Sunbursts
       if (enemies) {
         this.renderParticles(enemies.particles);
       }
 
       this.ctx.restore();
 
-      // 6. As player approaches center hole (z <= 0.35), hyperspace light streaks emerge
-      if (t >= 0.45) {
-        const streakAlpha = Math.min(1.0, (t - 0.45) / 0.55);
-        const maxRadius = Math.max(this.screenWidth, this.screenHeight) * 0.8;
-        this.ctx.save();
-        this.ctx.globalAlpha = streakAlpha;
-        for (const star of this.warpStars) {
-          star.dist = (star.dist + star.speed * (0.04 + t * 0.08)) % 1.0;
-          const currentR = Math.pow(star.dist, 2.0) * maxRadius;
-          const streakLen = Math.min(currentR * 0.7, 25 + t * 90);
-          const prevR = Math.max(0, currentR - streakLen);
-          const cosA = Math.cos(star.angle);
-          const sinA = Math.sin(star.angle);
-          if (currentR > 8) {
-            this.drawVectorLine(cx + cosA * prevR, cy + sinA * prevR, cx + cosA * currentR, cy + sinA * currentR, star.color, star.width, true);
-          }
-        }
-        this.ctx.restore();
+      // 6. Purple/violet Space Debris emerging from the tube's center hole (targetHoleX, targetHoleY)
+      const holeBaseR = 34 * zoom;
+      this.ctx.save();
+      for (const deb of this.spaceDebris) {
+        deb.dist = (deb.dist + deb.speed * dt * 0.85) % 1.0;
+        const spreadR = Math.pow(deb.dist, 1.7) * (holeBaseR * (0.35 + t * 2.2));
+        const x = targetHoleX + Math.cos(deb.angle) * spreadR;
+        const y = targetHoleY + Math.sin(deb.angle) * spreadR;
+        const sz = deb.size;
+        this.ctx.fillStyle = deb.color;
+        this.ctx.fillRect(x - sz * 0.5, y - sz * 0.5, sz, sz);
       }
+      this.ctx.restore();
 
       // 7. Authentic arcade warning: "AVOID SPIKES" if any spikes are present in the tube!
       if (enemies && enemies.spikes && enemies.spikes.size > 0) {
-        const textY = this.viewport.y + Math.max(56, this.viewport.height * 0.08);
+        const textY = Math.max(54, this.screenHeight * 0.08);
         const pulse = 0.85 + Math.sin(stateTimer * 12) * 0.15;
         this.ctx.save();
         this.ctx.globalAlpha = pulse;
-        this.drawVectorText('AVOID SPIKES', cx, textY, 20, '#ffffff', 'center');
+        this.drawVectorText('AVOID SPIKES', screenCx, textY, 18, '#ffffff', 'center');
         this.ctx.restore();
       }
 
     } else {
       // =========================================================================
-      // PHASE 2: NEXT LEVEL EMERGENCE & GROWTH (2.4s to 5.2s)
-      // Moving so fast that light trails look like lines, then tiny version of next level zooms up
+      // PHASE 2 & 3: DEEP SPACE TRANSIT & NEXT LEVEL EMERGENCE (1.9s to 4.8s)
+      // Reference Image 5:
+      // - Old tube is COMPLETELY GONE
+      // - 3D field of purple/violet glowing space debris streaming outward from screen center
+      // - Top Center: "LEVEL  <nextLevel>" in blue QuadraScan typography
+      // - Bottom Center: "SUPERZAPPER RECHARGE" in blue QuadraScan typography
+      // - Center of screen: Tiny white dot / miniature wireframe emerging and expanding
       // =========================================================================
-      const p = Math.min(1.0, (stateTimer - diveDuration) / (totalDuration - diveDuration));
-      const ease = 1 - Math.pow(1 - p, 3);
-      // Starts tiny at 0.04 in center and grows smoothly to full scale 1.0
-      const scale = 0.04 + 0.96 * ease;
+      this.activeWeb = nextWeb;
 
-      // 1. Hyperspace light trail lines streaming outward from center (video 0:24-0:26)
-      const maxRadius = Math.max(this.screenWidth, this.screenHeight) * 0.85;
-      const trailAlpha = Math.max(0.15, 1.0 - p * 0.85);
+      // 1. Dynamic Vanishing Point for BOTH Deep Space Fly-Through and New Level
+      const nextHole = this.getWebVisualCenterScreen(nextWeb);
+      const nhx = nextHole.x;
+      const nhy = nextHole.y;
+
+      let vpX, vpY, scale, colorOverride;
+
+      if (stateTimer < 2.6) {
+        // Stage 2 (1.9s - 2.6s): Deep space stationary at center of play area
+        vpX = screenCx;
+        vpY = screenCy;
+        scale = 0.035;
+        colorOverride = '#ffffff';
+      } else {
+        // Stage 3 (2.6s - 4.8s): Wireframe expands smoothly, moving the visual vanishing point
+        // of BOTH the Deep Space Fly-Through AND the new level, one frame at a time,
+        // from screen center (screenCx, screenCy) to resting position (nhx, nhy)
+        const growProgress = Math.min(1.0, (stateTimer - 2.6) / (totalDuration - 2.6));
+        const ease = 1 - Math.pow(1 - growProgress, 2.5);
+        scale = 0.035 + 0.965 * ease;
+
+        vpX = screenCx + (nhx - screenCx) * ease;
+        vpY = screenCy + (nhy - screenCy) * ease;
+        colorOverride = growProgress < 0.65 ? '#ffffff' : null;
+      }
+
+      // 2. Full-screen 3D Purple Space Debris Streaming Outward from the dynamic vanishing point (vpX, vpY)
+      const maxRadius = Math.max(this.screenWidth, this.screenHeight) * 0.88;
       this.ctx.save();
-      this.ctx.globalAlpha = trailAlpha;
-      for (const star of this.warpStars) {
-        star.dist = (star.dist + star.speed * (0.05 + (1.0 - p) * 0.07)) % 1.0;
-        const currentR = Math.pow(star.dist, 1.8) * maxRadius;
-        const streakLen = Math.min(currentR * 0.8, 40 + (1.0 - p) * 120);
-        const prevR = Math.max(0, currentR - streakLen);
-        const cosA = Math.cos(star.angle);
-        const sinA = Math.sin(star.angle);
-        if (currentR > 6) {
-          this.drawVectorLine(cx + cosA * prevR, cy + sinA * prevR, cx + cosA * currentR, cy + sinA * currentR, star.color, star.width * 1.2, true);
-        }
+      for (const deb of this.spaceDebris) {
+        deb.dist = (deb.dist + deb.speed * dt * 0.75) % 1.0;
+        const r = Math.pow(deb.dist, 1.8) * maxRadius;
+        const x = vpX + Math.cos(deb.angle) * r;
+        const y = vpY + Math.sin(deb.angle) * r;
+        const sz = deb.size * (0.85 + deb.dist * 0.55);
+        this.ctx.fillStyle = deb.color;
+        this.ctx.fillRect(x - sz * 0.5, y - sz * 0.5, sz, sz);
       }
       this.ctx.restore();
 
-      // 2. Next Level Tube wireframe zooming from tiny center up to full size
-      if (nextWeb) {
+      // 3. Blue Vector Typography matching Image 5:
+      // Top: LEVEL <N> in blue directly beneath high score
+      const hudSize = Math.max(10, Math.min(15, this.viewport.width * 0.026));
+      const topY = this.viewport.y + 16;
+      this.drawVectorText(`LEVEL  ${nextLevelNum}`, screenCx, topY + hudSize * 1.45, hudSize * 1.05, '#3377ff', 'center');
+
+      // Bottom: SUPERZAPPER RECHARGE in blue
+      const bottomY = this.viewport.y + this.viewport.height - 24;
+      const zapPulse = 0.85 + Math.sin(stateTimer * 10) * 0.15;
+      this.ctx.save();
+      this.ctx.globalAlpha = zapPulse;
+      this.drawVectorText('SUPERZAPPER RECHARGE', screenCx, bottomY, hudSize * 1.0, '#3377ff', 'center');
+      this.ctx.restore();
+
+      // 4. Render New Level Wireframe centered on the identical vanishing point (vpX, vpY)
+      this.ctx.save();
+      this.ctx.translate(vpX, vpY);
+      this.ctx.scale(scale, scale);
+      this.ctx.translate(-nhx, -nhy);
+      this.renderWeb(nextWeb, -1, colorOverride);
+      this.ctx.restore();
+
+      // Brilliant pure white core dot in center of emerging wireframe when tiny
+      if (scale < 0.12) {
         this.ctx.save();
-        this.ctx.translate(cx, cy);
-        this.ctx.scale(scale, scale);
-        this.ctx.translate(-cx, -cy);
-
-        this.renderWeb(nextWeb, -1);
-
-        this.ctx.restore();
-      }
-
-      // 3. Level Announcement & SUPERZAPPER RECHARGE Vector Typography
-      const textAlpha = Math.min(1.0, Math.max(0.0, (p - 0.08) * 1.5));
-      if (textAlpha > 0.01) {
-        const textY = Math.max(this.viewport.y + 50, cy - (115 * scale) - 36);
-        this.ctx.save();
-        this.ctx.globalAlpha = textAlpha;
-        this.drawVectorText(`LEVEL ${nextLevelNum}`, cx, textY, 22, '#ffffff', 'center');
-
-        // Authentic SUPERZAPPER RECHARGE vector banner
-        const zapPulse = 0.85 + Math.sin(stateTimer * 10) * 0.15;
-        this.ctx.globalAlpha = textAlpha * zapPulse;
-        this.drawVectorText('SUPERZAPPER RECHARGE', cx, textY + 34, 16, '#00ffff', 'center');
+        this.ctx.fillStyle = '#ffffff';
+        this.ctx.beginPath();
+        this.ctx.arc(vpX, vpY, 3.2, 0, Math.PI * 2);
+        this.ctx.fill();
         this.ctx.restore();
       }
     }
+  }
+
+  /**
+   * Toggle Visual Vanishing Point & Play Area Center overlay
+   */
+  toggleDebugOverlay() {
+    this.showDebugOverlay = !this.showDebugOverlay;
+    return this.showDebugOverlay;
+  }
+
+  /**
+   * Render diagnostic crosshairs and coordinates for Play Area Center and Tube Vanishing Point
+   */
+  renderDebugOverlay(web, levelNum) {
+    if (!this.showDebugOverlay) return;
+    const ctx = this.ctx;
+    const screenCx = this.viewport.centerX || this.screenWidth * 0.5;
+    const screenCy = this.viewport.centerY || this.screenHeight * 0.5;
+
+    // 1. Center of Play Area (Red Crosshair + Circle)
+    ctx.save();
+    ctx.strokeStyle = '#ff3344';
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    ctx.arc(screenCx, screenCy, 8, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(screenCx - 16, screenCy);
+    ctx.lineTo(screenCx + 16, screenCy);
+    ctx.moveTo(screenCx, screenCy - 16);
+    ctx.lineTo(screenCx, screenCy + 16);
+    ctx.stroke();
+
+    this.drawVectorText(`PLAY CENTER (${Math.round(screenCx)}, ${Math.round(screenCy)})`, screenCx + 12, screenCy - 12, 10, '#ff3344', 'left');
+
+    // 2. Tube Visual Vanishing Point (Green Crosshair + Circle)
+    if (web) {
+      const vHole = this.getWebVisualCenterScreen(web);
+      ctx.strokeStyle = '#00ff66';
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.arc(vHole.x, vHole.y, 8, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(vHole.x - 16, vHole.y);
+      ctx.lineTo(vHole.x + 16, vHole.y);
+      ctx.moveTo(vHole.x, vHole.y - 16);
+      ctx.lineTo(vHole.x, vHole.y + 16);
+      ctx.stroke();
+
+      const vc = (typeof web.getVisualCenter === 'function') ? web.getVisualCenter() : { x: 0, y: 0 };
+      this.drawVectorText(`TUBE VP [${vc.x.toFixed(1)}, ${vc.y.toFixed(1)}] (${Math.round(vHole.x)}, ${Math.round(vHole.y)})`, vHole.x + 12, vHole.y + 14, 10, '#00ff66', 'left');
+
+      // Connecting dashed line
+      ctx.strokeStyle = '#ffff00';
+      ctx.lineWidth = 1.2;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(screenCx, screenCy);
+      ctx.lineTo(vHole.x, vHole.y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      
+      const midX = (screenCx + vHole.x) * 0.5;
+      const midY = (screenCy + vHole.y) * 0.5;
+      const dist = Math.hypot(vHole.x - screenCx, vHole.y - screenCy);
+      this.drawVectorText(`Δ: ${Math.round(dist)}px`, midX + 8, midY, 9, '#ffff00', 'left');
+    }
+
+    // 3. Diagnostic HUD Box in bottom-left
+    const boxX = this.viewport.x + 14;
+    const boxY = this.viewport.y + this.viewport.height - 110;
+    ctx.fillStyle = 'rgba(0, 10, 20, 0.85)';
+    ctx.strokeStyle = '#00ffff';
+    ctx.lineWidth = 1.4;
+    ctx.fillRect(boxX, boxY, 340, 95);
+    ctx.strokeRect(boxX, boxY, 340, 95);
+
+    const name = web ? web.name : 'Unknown';
+    const id = web ? web.id : 0;
+    const closed = (web && web.isClosed) ? 'Closed' : 'Open';
+    this.drawVectorText(`VP DIAGNOSTICS: LVL ${levelNum || 1} - ${name} (${closed})`, boxX + 10, boxY + 14, 10, '#00ffff', 'left');
+    this.drawVectorText(`NUDGE VP: [I] UP  [K] DOWN  [J] LEFT  [L] RIGHT`, boxX + 10, boxY + 34, 9, '#ffff00', 'left');
+    this.drawVectorText(`RESET: [R]  |  PRINT CONFIG: [P]  |  TOGGLE: [V]`, boxX + 10, boxY + 54, 9, '#00ffaa', 'left');
+    if (web && web.visualCenter) {
+      this.drawVectorText(`CURRENT OFFSET: X: ${web.visualCenter.x.toFixed(1)}, Y: ${web.visualCenter.y.toFixed(1)}`, boxX + 10, boxY + 74, 9, '#ff88ff', 'left');
+    }
+
+    ctx.restore();
   }
 
   /**
@@ -581,6 +818,7 @@ export class VectorRenderer {
    */
   renderBlaster(player, web) {
     if (!player.isAlive) return;
+    this.activeWeb = web;
 
     const lane = player.lane;
     const z = player.z;
@@ -612,8 +850,8 @@ export class VectorRenderer {
     const nout_x = -nx;
     const nout_y = -ny;
 
-    // Clamp depth/prong scale so claw never becomes bloated on wide or complex lanes
-    const depthScale = Math.min(W, 44);
+    // Depth/prong scale proportional to lane width, comfortably bounded
+    const depthScale = Math.min(W * 0.75, 52);
 
     // Coordinate helper: offsets along lane tangent (ux, uy) and normal (nx, ny)
     const pt = (base, uMul, ninMul, noutMul) => ({
@@ -650,14 +888,14 @@ export class VectorRenderer {
 
   /**
    * Render Bomb Projectiles racing down the active lane
-   * Recreates the authentic Atari Tempest single yellow 8-point sparkling bombs streaming one behind the other
    */
   renderShots(player, web) {
+    this.activeWeb = web;
     for (const shot of player.shots) {
       if (!shot.active) continue;
 
       const center = web.getLaneCenter(shot.lane, shot.z);
-      const pCenter = this.toScreen(center);
+      const pCenter = this.toScreen(center, web);
 
       // Single projectile centered in lane
       this._drawBomb(pCenter.x, pCenter.y, shot.z);
@@ -691,15 +929,16 @@ export class VectorRenderer {
    * Render Spikes (Green neon lines with barbed cross tip)
    */
   renderSpikes(enemiesManager, web) {
+    this.activeWeb = web;
     for (const [lane, maxZ] of enemiesManager.spikes.entries()) {
-      const pStart = this.toScreen(web.getLaneCenter(lane, 0.0));
-      const pEnd = this.toScreen(web.getLaneCenter(lane, maxZ));
+      const pStart = this.toScreen(web.getLaneCenter(lane, 0.0), web);
+      const pEnd = this.toScreen(web.getLaneCenter(lane, maxZ), web);
 
       this.drawVectorLine(pStart.x, pStart.y, pEnd.x, pEnd.y, '#00ff00', 2.4, true);
 
       const edges = web.getLaneEdges(lane, maxZ);
-      const sLeft = this.toScreen(edges.left);
-      const sRight = this.toScreen(edges.right);
+      const sLeft = this.toScreen(edges.left, web);
+      const sRight = this.toScreen(edges.right, web);
       const tipWidth = 0.32;
 
       const tx0 = pEnd.x + (sLeft.x - pEnd.x) * tipWidth;
@@ -715,8 +954,9 @@ export class VectorRenderer {
    * Render Spikers (Spinning blue/white star spiral)
    */
   renderSpikers(spikers, web) {
+    this.activeWeb = web;
     for (const spiker of spikers) {
-      const center = this.toScreen(web.getLaneCenter(spiker.lane, spiker.z));
+      const center = this.toScreen(web.getLaneCenter(spiker.lane, spiker.z), web);
       const radius = 9;
       const numPoints = 8;
       const angleStep = (Math.PI * 2) / numPoints;
@@ -736,6 +976,7 @@ export class VectorRenderer {
    */
   renderAbyssFlies(abyssFlies, web) {
     if (!abyssFlies || abyssFlies.length === 0 || !web) return;
+    this.activeWeb = web;
 
     const lCount = web.laneCount;
     for (const fly of abyssFlies) {
@@ -756,7 +997,7 @@ export class VectorRenderer {
       const screenPt = this.toScreen({
         x: baseX + flutterX,
         y: baseY + flutterY
-      });
+      }, web);
 
       // Draw tiny red fly cross with bright phosphor glow
       const col = fly.color || '#ff2233';
@@ -770,6 +1011,9 @@ export class VectorRenderer {
    * Performs an authentic acrobatic 180° cartwheel (somersault) leaping over the rib
    */
   renderFlippers(flippers, web) {
+    this.activeWeb = web;
+    const transform = this.getWebTransform(web);
+
     for (const f of flippers) {
       let cx, cy, W, ux, uy, nx, ny, rotAngle = 0;
 
@@ -787,12 +1031,12 @@ export class VectorRenderer {
           x: p0.x + (p1.x - p0.x) * frac,
           y: p0.y + (p1.y - p0.y) * frac
         };
-        const sCenter = this.toScreen(pInterp);
+        const sCenter = this.toScreen(pInterp, web);
         cx = sCenter.x;
         cy = sCenter.y;
 
-        const s0 = this.toScreen(p0);
-        const s1 = this.toScreen(p1);
+        const s0 = this.toScreen(p0, web);
+        const s1 = this.toScreen(p1, web);
         const dx = s1.x - s0.x;
         const dy = s1.y - s0.y;
         W = Math.max(7, Math.hypot(dx, dy) * 0.85);
@@ -801,8 +1045,8 @@ export class VectorRenderer {
 
         nx = -uy;
         ny = ux;
-        const toCenterX = this.viewport.centerX - cx;
-        const toCenterY = this.viewport.centerY - cy;
+        const toCenterX = transform.centerX - cx;
+        const toCenterY = transform.centerY - cy;
         if (nx * toCenterX + ny * toCenterY < 0) {
           nx = -nx;
           ny = -ny;
@@ -814,10 +1058,10 @@ export class VectorRenderer {
         const sEdges = web.getLaneEdges(f.flipSourceLane, z);
         const tEdges = web.getLaneEdges(f.flipTargetLane, z);
 
-        const sL_src = this.toScreen(sEdges.left);
-        const sR_src = this.toScreen(sEdges.right);
-        const sL_tgt = this.toScreen(tEdges.left);
-        const sR_tgt = this.toScreen(tEdges.right);
+        const sL_src = this.toScreen(sEdges.left, web);
+        const sR_src = this.toScreen(sEdges.right, web);
+        const sL_tgt = this.toScreen(tEdges.left, web);
+        const sR_tgt = this.toScreen(tEdges.right, web);
 
         const srcCenter = { x: (sL_src.x + sR_src.x) * 0.5, y: (sL_src.y + sR_src.y) * 0.5 };
         const tgtCenter = { x: (sL_tgt.x + sR_tgt.x) * 0.5, y: (sL_tgt.y + sR_tgt.y) * 0.5 };
@@ -842,7 +1086,7 @@ export class VectorRenderer {
 
         nx = -uy;
         ny = ux;
-        const holePos = this.toScreen(web.getLaneCenter(f.flipSourceLane, 0.0));
+        const holePos = this.toScreen(web.getLaneCenter(f.flipSourceLane, 0.0), web);
         const toCenterX = holePos.x - midX;
         const toCenterY = holePos.y - midY;
         if (nx * toCenterX + ny * toCenterY < 0) {
@@ -868,8 +1112,8 @@ export class VectorRenderer {
       } else {
         const z = f.onRim ? 1.0 : f.z;
         const edges = web.getLaneEdges(f.lane, z);
-        const sL = this.toScreen(edges.left);
-        const sR = this.toScreen(edges.right);
+        const sL = this.toScreen(edges.left, web);
+        const sR = this.toScreen(edges.right, web);
 
         const dx = sR.x - sL.x;
         const dy = sR.y - sL.y;
@@ -883,7 +1127,7 @@ export class VectorRenderer {
 
         nx = -uy;
         ny = ux;
-        const holePos = this.toScreen(web.getLaneCenter(f.lane, 0.0));
+        const holePos = this.toScreen(web.getLaneCenter(f.lane, 0.0), web);
         const toCenterX = holePos.x - cx;
         const toCenterY = holePos.y - cy;
         if (nx * toCenterX + ny * toCenterY < 0) {
@@ -927,16 +1171,25 @@ export class VectorRenderer {
   }
 
   /**
-   * Render Tankers (from TANKR in ALVROM.MAC)
+   * Render Tankers (from TANKR / GENTNK in Dave Theurer's ALVROM.MAC lines 648-669)
+   * 
+   * Authentic 16-stroke continuous vector diamond:
+   * - Outer 4 diamond vertices at (0, -r), (r, 0), (0, r), (-r, 0)
+   * - Inner 4 diamond vertices at (0, -ir), (ir, 0), (0, ir), (-ir, 0) with ir = 0.375 * r
+   * - Outer diamond perimeter (4 lines)
+   * - Inner diamond perimeter (4 lines)
+   * - 4 axial spokes connecting outer corners to inner corners
+   * - 4 diagonal pinwheel facets connecting inner vertices to outer vertices
    */
   renderTankers(tankers, web) {
+    this.activeWeb = web;
     const ctx = this.ctx;
 
     for (const t of tankers) {
-      const center = this.toScreen(web.getLaneCenter(t.lane, t.z));
+      const center = this.toScreen(web.getLaneCenter(t.lane, t.z), web);
       const edges = web.getLaneEdges(t.lane, t.z);
-      const sL = this.toScreen(edges.left);
-      const sR = this.toScreen(edges.right);
+      const sL = this.toScreen(edges.left, web);
+      const sR = this.toScreen(edges.right, web);
       const radius = Math.max(6, Math.hypot(sR.x - sL.x, sR.y - sL.y) * 0.38);
 
       ctx.save();
@@ -946,21 +1199,202 @@ export class VectorRenderer {
       const r = radius * pulse;
       const col = t.color || '#cc00ff';
 
-      const pts = [
-        { x: 0, y: -r }, { x: r * 0.5, y: -r * 0.5 },
-        { x: r, y: 0 }, { x: r * 0.5, y: r * 0.5 },
-        { x: 0, y: r }, { x: -r * 0.5, y: r * 0.5 },
-        { x: -r, y: 0 }, { x: -r * 0.5, y: -r * 0.5 }
-      ];
+      // Authentic Atari TANKR vector geometry from ALVROM.MAC (lines 648-669)
+      const ir = r * 0.375;
 
-      for (let i = 0; i < pts.length; i++) {
-        const p0 = pts[i];
-        const p1 = pts[(i + 1) % pts.length];
-        this.drawVectorLine(p0.x, p0.y, p1.x, p1.y, col, 2.4, true);
+      // Outer 4 diamond vertices
+      const pOutTop = { x: 0, y: -r };
+      const pOutRight = { x: r, y: 0 };
+      const pOutBottom = { x: 0, y: r };
+      const pOutLeft = { x: -r, y: 0 };
+
+      // Inner 4 diamond vertices (12/32 = 0.375)
+      const pInTop = { x: 0, y: -ir };
+      const pInRight = { x: ir, y: 0 };
+      const pInBottom = { x: 0, y: ir };
+      const pInLeft = { x: -ir, y: 0 };
+
+      // 1. Outer diamond perimeter (4 lines)
+      this.drawVectorLine(pOutRight.x, pOutRight.y, pOutTop.x, pOutTop.y, col, 2.2, true);
+      this.drawVectorLine(pOutTop.x, pOutTop.y, pOutLeft.x, pOutLeft.y, col, 2.2, true);
+      this.drawVectorLine(pOutLeft.x, pOutLeft.y, pOutBottom.x, pOutBottom.y, col, 2.2, true);
+      this.drawVectorLine(pOutBottom.x, pOutBottom.y, pOutRight.x, pOutRight.y, col, 2.2, true);
+
+      // 2. Inner diamond perimeter (4 lines)
+      this.drawVectorLine(pInRight.x, pInRight.y, pInTop.x, pInTop.y, col, 2.0, true);
+      this.drawVectorLine(pInTop.x, pInTop.y, pInLeft.x, pInLeft.y, col, 2.0, true);
+      this.drawVectorLine(pInLeft.x, pInLeft.y, pInBottom.x, pInBottom.y, col, 2.0, true);
+      this.drawVectorLine(pInBottom.x, pInBottom.y, pInRight.x, pInRight.y, col, 2.0, true);
+
+      // 3. Axial spokes connecting outer vertices to inner vertices (4 lines)
+      this.drawVectorLine(pOutTop.x, pOutTop.y, pInTop.x, pInTop.y, col, 1.8, true);
+      this.drawVectorLine(pOutRight.x, pOutRight.y, pInRight.x, pInRight.y, col, 1.8, true);
+      this.drawVectorLine(pOutBottom.x, pOutBottom.y, pInBottom.x, pInBottom.y, col, 1.8, true);
+      this.drawVectorLine(pOutLeft.x, pOutLeft.y, pInLeft.x, pInLeft.y, col, 1.8, true);
+
+      // 4. Pinwheel diagonal facets connecting inner vertices to outer vertices (4 lines)
+      this.drawVectorLine(pInTop.x, pInTop.y, pOutRight.x, pOutRight.y, col, 1.8, true);
+      this.drawVectorLine(pInLeft.x, pInLeft.y, pOutTop.x, pOutTop.y, col, 1.8, true);
+      this.drawVectorLine(pInBottom.x, pInBottom.y, pOutLeft.x, pOutLeft.y, col, 1.8, true);
+      this.drawVectorLine(pInRight.x, pInRight.y, pOutBottom.x, pOutBottom.y, col, 1.8, true);
+
+      // Optional contents: pulsar or fuse icons inside the inner diamond
+      if (t.type === 'pulsar') {
+        const cr = ir * 0.7;
+        this.drawVectorLine(-cr * 0.7, -cr * 0.3, 0, cr * 0.7, '#00ffff', 1.8, true);
+        this.drawVectorLine(0, cr * 0.7, cr * 0.7, -cr * 0.3, '#00ffff', 1.8, true);
+      } else if (t.type === 'fuse') {
+        const fr = ir * 0.45;
+        this.drawVectorLine(-fr, 0, fr, 0, '#ffff00', 1.8, true);
+        this.drawVectorLine(0, -fr, 0, fr, '#ff3333', 1.8, true);
       }
-      this.drawVectorLine(-r * 0.5, 0, r * 0.5, 0, col, 2.0, true);
-      this.drawVectorLine(0, -r * 0.5, 0, r * 0.5, col, 2.0, true);
 
+      ctx.restore();
+    }
+  }
+
+  /**
+   * Render Pulsars - Electric lane-spanning waveforms that pulse taller and shorter
+   * Dave Theurer's original Atari Tempest Pulsar geometry:
+   * Spans across the lane at depth z; oscillates in height.
+   * When electrified (pulseHeight > 0.42), sparks and glows with electric arcs.
+   */
+  renderPulsars(pulsars, web) {
+    if (!pulsars || pulsars.length === 0) return;
+    this.activeWeb = web;
+
+    for (const p of pulsars) {
+      const edges = web.getLaneEdges(p.lane, p.z);
+      if (!edges) continue;
+
+      const sL = this.toScreen(edges.left, web);
+      const sR = this.toScreen(edges.right, web);
+
+      const dx = sR.x - sL.x;
+      const dy = sR.y - sL.y;
+      const laneW = Math.hypot(dx, dy);
+      if (laneW < 1.0) continue;
+
+      const ux = dx / laneW;
+      const uy = dy / laneW;
+      // Normal vector pointing perpendicular to the lane edge (outward)
+      const nx = -uy;
+      const ny = ux;
+
+      // Pulse height stretches vertically (taller / shorter)
+      // When flat (pulseHeight ~ 0), height is small (~0.08 * laneW)
+      // When tall (pulseHeight ~ 1.0), height stretches to (~0.76 * laneW)
+      const pulseH = laneW * (0.08 + 0.68 * (p.pulseHeight || 0.0));
+      const isElec = p.isElectrified;
+
+      // Primary color: when electrified, bright electric cyan & pure white; when quiet, reddish/magenta
+      const baseCol = isElec ? (Math.random() < 0.5 ? '#ffffff' : '#00ffff') : '#ff3388';
+      const sparkCol = isElec ? '#ffff00' : '#ff0066';
+      const lineW = isElec ? 2.6 : 1.8;
+
+      // Zigzag waveform across lane (6 segments, 7 vertices)
+      const numSegments = 6;
+      const pts = [];
+      for (let s = 0; s <= numSegments; s++) {
+        const frac = s / numSegments;
+        const bx = sL.x + dx * frac;
+        const by = sL.y + dy * frac;
+        // Alternating peaks and valleys
+        let hSign = 0;
+        if (s > 0 && s < numSegments) {
+          hSign = (s % 2 === 1) ? 1.0 : -0.3;
+        }
+        // When electrified, add subtle high-voltage jitter
+        const jitter = isElec ? (Math.random() - 0.5) * (laneW * 0.12) : 0;
+        const px = bx + nx * (hSign * pulseH + jitter);
+        const py = by + ny * (hSign * pulseH + jitter);
+        pts.push({ x: px, y: py });
+      }
+
+      // Draw the waveform lines
+      for (let s = 0; s < pts.length - 1; s++) {
+        this.drawVectorLine(pts[s].x, pts[s].y, pts[s + 1].x, pts[s + 1].y, baseCol, lineW, true);
+      }
+
+      // If electrified, draw electric spark discharges along the peaks
+      if (isElec) {
+        for (let s = 1; s < pts.length - 1; s += 2) {
+          const pt = pts[s];
+          const sparkLen = (laneW * 0.28) * (0.6 + Math.random() * 0.5);
+          const sparkAngle = Math.atan2(ny, nx) + (Math.random() - 0.5) * 1.3;
+          const sx = pt.x + Math.cos(sparkAngle) * sparkLen;
+          const sy = pt.y + Math.sin(sparkAngle) * sparkLen;
+          this.drawVectorLine(pt.x, pt.y, sx, sy, sparkCol, 1.8, true);
+        }
+      }
+    }
+  }
+
+  /**
+   * Render Fuseballs - Multi-colored electric spark clusters crawling along lane boundary ribs
+   * Dave Theurer's original Atari Tempest Fuseball:
+   * Multi-colored, crackling, electrical looking star/spark cluster.
+   */
+  renderFuseballs(fuseballs, web) {
+    if (!fuseballs || fuseballs.length === 0) return;
+    this.activeWeb = web;
+    const ctx = this.ctx;
+
+    for (const f of fuseballs) {
+      const pt = web.getVertexPos(f.rib, f.z);
+      if (!pt) continue;
+      const center = this.toScreen(pt, web);
+
+      // Depth-scaled radius
+      const r = Math.max(3.5, 4.0 + f.z * 13.0);
+
+      // 1. Core multi-point electric spark star (6 radiating jagged spokes)
+      const spokeCount = 6;
+      const rot = (f.colorTimer || 0) * 8.0; // Rapid spinning electrical energy
+      const colors = ['#ff0055', '#00ffff', '#ffff00', '#00ff66', '#ffffff', '#cc00ff'];
+
+      for (let s = 0; s < spokeCount; s++) {
+        const ang = rot + s * (Math.PI * 2 / spokeCount);
+        const col = colors[(s + Math.floor((f.colorTimer || 0) * 20)) % colors.length];
+        // Jitter length for electric crackle
+        const spLen = r * (0.8 + (Math.random() * 0.45));
+        const midR = spLen * 0.55;
+        // Midpoint with zig-zag
+        const midAng = ang + (Math.random() - 0.5) * 0.35;
+        const mx = center.x + Math.cos(midAng) * midR;
+        const my = center.y + Math.sin(midAng) * midR;
+        const ex = center.x + Math.cos(ang) * spLen;
+        const ey = center.y + Math.sin(ang) * spLen;
+
+        this.drawVectorLine(center.x, center.y, mx, my, '#ffffff', 2.0, true);
+        this.drawVectorLine(mx, my, ex, ey, col, 2.2, true);
+      }
+
+      // 2. Connecting electric polygon ring around vertices
+      const ringPts = [];
+      const ringCount = 5;
+      const ringRot = -rot * 0.7;
+      for (let k = 0; k < ringCount; k++) {
+        const ang = ringRot + k * (Math.PI * 2 / ringCount);
+        const kLen = r * (0.65 + ((k % 2 === 0) ? 0.35 : 0));
+        ringPts.push({
+          x: center.x + Math.cos(ang) * kLen,
+          y: center.y + Math.sin(ang) * kLen
+        });
+      }
+      for (let k = 0; k < ringPts.length; k++) {
+        const p0 = ringPts[k];
+        const p1 = ringPts[(k + 1) % ringPts.length];
+        const ringCol = colors[(k * 2 + Math.floor((f.colorTimer || 0) * 15)) % colors.length];
+        this.drawVectorLine(p0.x, p0.y, p1.x, p1.y, ringCol, 1.8, true);
+      }
+
+      // 3. Bright white central spark core
+      ctx.save();
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(center.x, center.y, Math.max(1.8, r * 0.22), 0, Math.PI * 2);
+      ctx.fill();
       ctx.restore();
     }
   }
@@ -969,8 +1403,9 @@ export class VectorRenderer {
    * Render Enemy Bullets
    */
   renderBullets(bullets, web) {
+    this.activeWeb = web;
     for (const b of bullets) {
-      const center = this.toScreen(web.getLaneCenter(b.lane, b.z));
+      const center = this.toScreen(web.getLaneCenter(b.lane, b.z), web);
       const r = 4.5;
       this.drawVectorLine(center.x - r, center.y, center.x + r, center.y, b.color || '#ff44aa', 2.5, true);
       this.drawVectorLine(center.x, center.y - r, center.x, center.y + r, '#ffffff', 2.0, true);
@@ -978,19 +1413,88 @@ export class VectorRenderer {
   }
 
   /**
-   * Render Vector Particle Explosions
+   * Render Vector Particle Explosions / White Sunburst / Claw Shards
    */
   renderParticles(particles) {
     const ctx = this.ctx;
-    for (const p of particles) {
-      const screenPos = this.toScreen({ x: p.x, y: p.y });
-      const x2 = screenPos.x + Math.cos(p.angle) * p.length;
-      const y2 = screenPos.y + Math.sin(p.angle) * p.length;
+    const web = this.activeWeb;
 
-      ctx.save();
-      ctx.globalAlpha = p.alpha;
-      this.drawVectorLine(screenPos.x, screenPos.y, x2, y2, p.color, 2.2, true);
-      ctx.restore();
+    for (const p of particles) {
+      if (p.isShard) {
+        // 3D vector shard fragment from Claw explosion
+        const sp1 = this.toScreen({ x: p.x, y: p.y }, web);
+        const transform = web ? this.getWebTransform(web) : null;
+        const scale = transform ? (transform.scaleX + transform.scaleY) * 0.5 : (this.viewport.scale || 1.0);
+        const screenLen = (p.length || 8) * scale;
+        const cosA = Math.cos(p.angle);
+        const sinA = Math.sin(p.angle);
+        const halfL = screenLen * 0.5;
+        const x1 = sp1.x - cosA * halfL;
+        const y1 = sp1.y - sinA * halfL;
+        const x2 = sp1.x + cosA * halfL;
+        const y2 = sp1.y + sinA * halfL;
+        const progress = Math.min(1.0, (p.timer || 0) / (p.duration || 1.5));
+        const alpha = Math.max(0, 1.0 - progress);
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        this.drawVectorLine(x1, y1, x2, y2, p.color || '#ffff00', p.lineWidth || 2.4, true);
+        ctx.restore();
+      } else if (p.isSunburst || p.timer !== undefined) {
+        // Authentic 16-ray pure white sunburst explosion (Images 1 & 2)
+        const progress = Math.min(1.0, (p.timer || 0) / (p.duration || 0.45));
+
+        // Screen center & lane width
+        let center;
+        let laneW = 36;
+        if (p.lane !== undefined && p.lane >= 0 && web && p.z !== undefined) {
+          center = this.toScreen(web.getLaneCenter(p.lane, p.z), web);
+          const edges = web.getLaneEdges(p.lane, p.z);
+          const sL = this.toScreen(edges.left, web);
+          const sR = this.toScreen(edges.right, web);
+          laneW = Math.hypot(sR.x - sL.x, sR.y - sL.y);
+        } else {
+          center = this.toScreen({ x: p.x, y: p.y }, web);
+        }
+
+        const maxR = Math.max(10, Math.min(laneW * 0.54, 46));
+
+        // Expands for first 40% (~180ms), contracts for remaining 60% (~270ms)
+        let r;
+        if (progress < 0.40) {
+          r = maxR * (progress / 0.40);
+        } else {
+          r = maxR * (1.0 - (progress - 0.40) / 0.60);
+        }
+
+        if (r <= 0.8) continue;
+
+        ctx.save();
+        const burstColor = p.color || '#ffffff';
+        // 16 radiating rays
+        const rayCount = 16;
+        for (let i = 0; i < rayCount; i++) {
+          const angle = i * (Math.PI * 2 / rayCount);
+          const x2 = center.x + Math.cos(angle) * r;
+          const y2 = center.y + Math.sin(angle) * r;
+          this.drawVectorLine(center.x, center.y, x2, y2, burstColor, 2.2, true);
+        }
+
+        // Bright center core
+        ctx.fillStyle = burstColor;
+        ctx.beginPath();
+        ctx.arc(center.x, center.y, Math.min(3.2, Math.max(1.5, r * 0.22)), 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      } else {
+        const screenPos = this.toScreen({ x: p.x, y: p.y });
+        const x2 = screenPos.x + Math.cos(p.angle) * p.length;
+        const y2 = screenPos.y + Math.sin(p.angle) * p.length;
+
+        ctx.save();
+        ctx.globalAlpha = p.alpha;
+        this.drawVectorLine(screenPos.x, screenPos.y, x2, y2, p.color, 2.2, true);
+        ctx.restore();
+      }
     }
   }
 
@@ -1057,7 +1561,7 @@ export class VectorRenderer {
    * - Top Left: 1P Score & Mini-Blaster Life icons
    * - Top Center: Best Score & Initials (e.g. "192689  BVD") with Skill Level number directly beneath in cyan/blue
    */
-  renderHUD(score, highScore, highScoreInitials, level, lives, superzapperCharges) {
+  renderHUD(score, highScore, highScoreInitials, level, lives, superzapperCharges, hideLevelNumber = false) {
     const topY = this.viewport.y + 16;
     const bottomY = this.viewport.y + this.viewport.height - 24;
     const hudSize = Math.max(10, Math.min(15, this.viewport.width * 0.026));
@@ -1080,10 +1584,12 @@ export class VectorRenderer {
     this.drawVectorText(`${scoreStr}  ${initials}`, this.viewport.centerX, topY, hudSize, '#00ffff', 'center');
 
     // Skill Level: Playfield number displayed directly beneath High Score (authentic flyer placement!)
-    this.drawVectorText(String(level), this.viewport.centerX, topY + hudSize * 1.45, hudSize * 1.05, '#00e5ff', 'center');
+    if (!hideLevelNumber) {
+      this.drawVectorText(String(level), this.viewport.centerX, topY + hudSize * 1.45, hudSize * 1.05, '#00e5ff', 'center');
+    }
 
     // Superzapper Charges Status (Bottom Center)
-    if (superzapperCharges > 0) {
+    if (superzapperCharges > 0 && !hideLevelNumber) {
       this.drawVectorText(`SUPERZAPPER: [${superzapperCharges}]`, this.viewport.centerX, bottomY, hudSize * 0.85, '#00ffaa', 'center');
     }
   }

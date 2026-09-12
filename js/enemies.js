@@ -49,6 +49,8 @@ export class EnemyManager {
     this.flippers = [];
     this.spikers = [];
     this.tankers = [];
+    this.pulsars = [];
+    this.fuseballs = [];
     this.spikes = new Map(); // laneIndex -> maxZ
     this.enemyBullets = [];
     this.particles = [];
@@ -68,58 +70,91 @@ export class EnemyManager {
     this.flippers = [];
     this.spikers = [];
     this.tankers = [];
+    this.pulsars = [];
+    this.fuseballs = [];
     this.spikes.clear();
     this.enemyBullets = [];
     this.particles = [];
 
-    this.spawnTimer = 1.2;
-    this.spawnInterval = Math.max(0.7, 1.8 - level * 0.12);
-    this.enemiesRemainingInWave = 14 + level * 4;
+    this.spawnTimer = 0.8;
+    this.spawnInterval = Math.max(0.65, 1.6 - level * 0.08);
     this.highestEnemyZ = 0;
 
-    // Pre-populate initial abyss swirl pool: 3-4 flippers swirling far away in the center hole
-    const initialSwirlCount = Math.min(4, Math.max(2, Math.floor(web.laneCount / 4)));
-    for (let i = 0; i < initialSwirlCount; i++) {
-      const swirlLane = (i * (web.laneCount / initialSwirlCount)) % web.laneCount;
-      this.flippers.push({
-        lane: Math.floor(swirlLane),
-        z: 0.0,
-        speed: 0.22 + (level * 0.015),
-        isSwirling: true,
-        swirlLane: swirlLane,
-        swirlSpeed: (i % 2 === 0 ? 1 : -1) * (1.8 + Math.random() * 0.8),
-        swirlTimer: 1.8 + i * 1.2, // Sequentially exit swirl pool into lanes
-        isFlipping: false,
-        flipProgress: 0,
-        flipSourceLane: Math.floor(swirlLane),
-        flipTargetLane: Math.floor(swirlLane),
-        flipCooldown: 0.9 + Math.random() * 1.2,
-        onRim: false,
-        rimDirection: Math.random() < 0.5 ? 1 : -1,
-        rimMoveTimer: 0,
-        color: '#ff0000',
-        shootTimer: 2.2 + Math.random() * 2.5
-      });
-    }
-    this.enemiesRemainingInWave = Math.max(0, this.enemiesRemainingInWave - initialSwirlCount);
+    // Initialize the exact wave enemy pool and abyss flies
+    this._initWaveQueue(web, level);
 
-    // Initialize the swarm of red abyss flies buzzing far away around the center hole
-    this._initAbyssFlies(web);
+    // Immediately spawn 2 initial vanguard enemies into the tube so the action starts right away
+    if (this.abyssFlies.length > 0) this.spawnEnemy();
+    if (this.abyssFlies.length > 0) this.spawnEnemy();
   }
 
-  _initAbyssFlies(web) {
-    this.abyssFlies = [];
-    const count = Math.min(8, Math.max(5, Math.floor(web.laneCount / 2)));
-    for (let i = 0; i < count; i++) {
-      this.abyssFlies.push({
-        lane: (i * (web.laneCount / count) + Math.random() * 0.5) % web.laneCount,
-        speed: (i % 2 === 0 ? 1 : -1) * (1.2 + Math.random() * 2.0),
-        flutterPhase: Math.random() * Math.PI * 2,
-        flutterFreq: 12 + Math.random() * 8,
-        radialJitter: (Math.random() - 0.5) * 4,
-        color: '#ff2233'
-      });
+  _initWaveQueue(web, level) {
+    const totalCount = 12 + Math.min(level * 3, 24);
+
+    let flipperCount = 0;
+    let spikerCount = 0;
+    let tankerCount = 0;
+    let pulsarCount = 0;
+    let fuseballCount = 0;
+
+    if (level === 1) {
+      flipperCount = totalCount;
+    } else if (level === 2) {
+      spikerCount = Math.floor(totalCount * 0.35);
+      flipperCount = totalCount - spikerCount;
+    } else if (level >= 3 && level <= 8) {
+      tankerCount = Math.max(3, Math.floor(totalCount * 0.28));
+      spikerCount = Math.max(3, Math.floor(totalCount * 0.28));
+      flipperCount = Math.max(2, totalCount - tankerCount - spikerCount);
+    } else if (level === 9 || level === 10) {
+      // Wave 9+: Guaranteed Pulsars (at least 4-5) + Tankers + Spikers + Flippers
+      pulsarCount = Math.max(4, Math.floor(totalCount * 0.28));
+      tankerCount = Math.max(3, Math.floor(totalCount * 0.22));
+      spikerCount = Math.max(3, Math.floor(totalCount * 0.22));
+      flipperCount = Math.max(2, totalCount - pulsarCount - tankerCount - spikerCount);
+    } else {
+      // Wave 11+: Guaranteed Fuseballs (at least 4) + Pulsars (at least 4) + Tankers + Spikers + Flippers
+      fuseballCount = Math.max(4, Math.floor(totalCount * 0.24));
+      pulsarCount = Math.max(4, Math.floor(totalCount * 0.24));
+      tankerCount = Math.max(3, Math.floor(totalCount * 0.20));
+      spikerCount = Math.max(3, Math.floor(totalCount * 0.16));
+      flipperCount = Math.max(2, totalCount - fuseballCount - pulsarCount - tankerCount - spikerCount);
     }
+
+    const enemyTypes = [];
+    for (let i = 0; i < flipperCount; i++) enemyTypes.push({ type: 'flipper', color: '#ff2233' });
+    for (let i = 0; i < spikerCount; i++) enemyTypes.push({ type: 'spiker', color: '#00ff44' });
+    for (let i = 0; i < tankerCount; i++) {
+      let subType = 'flipper';
+      if (level >= 4 && Math.random() < 0.45) subType = 'pulsar';
+      else if (level >= 5 && Math.random() < 0.45) subType = 'fuse';
+      enemyTypes.push({ type: 'tanker', subType: subType, color: '#cc22ff' });
+    }
+    for (let i = 0; i < pulsarCount; i++) enemyTypes.push({ type: 'pulsar', color: '#ffff00' });
+    for (let i = 0; i < fuseballCount; i++) enemyTypes.push({ type: 'fuseball', color: '#00ffff' });
+
+    // Shuffle the queue so enemy variety appears evenly throughout the wave
+    for (let i = enemyTypes.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const temp = enemyTypes[i];
+      enemyTypes[i] = enemyTypes[j];
+      enemyTypes[j] = temp;
+    }
+
+    // Every waiting enemy is represented by an active buzzing dot in the abyss hole
+    const lCount = web.laneCount;
+    this.abyssFlies = enemyTypes.map((item, idx) => ({
+      type: item.type,
+      subType: item.subType,
+      color: item.color,
+      lane: (idx * (lCount / enemyTypes.length) + Math.random() * 0.5) % lCount,
+      speed: (idx % 2 === 0 ? 1 : -1) * (1.2 + Math.random() * 1.8),
+      flutterPhase: Math.random() * Math.PI * 2,
+      flutterFreq: 12 + Math.random() * 8,
+      radialJitter: (Math.random() - 0.5) * 3
+    }));
+
+    this.enemiesRemainingInWave = this.abyssFlies.length;
   }
 
   /**
@@ -202,6 +237,16 @@ export class EnemyManager {
       t.lane = web.clampLane((safeLane + oppositeLane + spread) % web.laneCount);
     }
 
+    for (const p of this.pulsars) {
+      p.z = 0.05 + Math.random() * 0.08;
+      p.pulseHeight = 0;
+    }
+
+    for (const f of this.fuseballs) {
+      f.z = 0.05 + Math.random() * 0.08;
+      f.dir = 1;
+    }
+
     for (const s of this.spikers) {
       s.z = Math.min(s.z, 0.15);
       s.ascending = true;
@@ -265,7 +310,35 @@ export class EnemyManager {
       }
     }
 
-    // 4. Enemy bullets near rim
+    // 4. Pulsars near rim
+    for (let i = this.pulsars.length - 1; i >= 0; i--) {
+      const p = this.pulsars[i];
+      if (p.lane === playerLane && p.z >= 0.70) {
+        const pt = this.web.getLaneCenter(p.lane, p.z);
+        this.createExplosion(pt, '#00ffff', 24);
+        this.pulsars.splice(i, 1);
+        if (audio) audio.playExplosion(false);
+        if (onScore) onScore(200);
+        return true;
+      }
+    }
+
+    // 5. Fuseballs near rim
+    for (let i = this.fuseballs.length - 1; i >= 0; i--) {
+      const f = this.fuseballs[i];
+      const leftRib = playerLane;
+      const rightRib = (playerLane + 1) % this.web.vertexCount;
+      if ((f.rib === leftRib || f.rib === rightRib) && f.z >= 0.70) {
+        const pt = this.web.getVertexPos(f.rib, f.z);
+        this.createExplosion(pt, '#ffff00', 24);
+        this.fuseballs.splice(i, 1);
+        if (audio) audio.playExplosion(false);
+        if (onScore) onScore(250);
+        return true;
+      }
+    }
+
+    // 6. Enemy bullets near rim
     for (let i = this.enemyBullets.length - 1; i >= 0; i--) {
       const b = this.enemyBullets[i];
       if (b.lane === playerLane && b.z >= 0.75) {
@@ -285,58 +358,71 @@ export class EnemyManager {
   updateParticlesOnly(dt) {
     for (let i = this.particles.length - 1; i >= 0; i--) {
       const p = this.particles[i];
-      p.x += p.vx * dt;
-      p.y += p.vy * dt;
-      p.life -= dt;
-      p.alpha = Math.max(0, p.life / p.maxLife);
-      if (p.life <= 0) {
+      p.timer = (p.timer || 0) + dt;
+      p.life = (p.life !== undefined ? p.life : 0.45) - dt;
+      if (p.isShard) {
+        p.x += (p.vx || 0) * dt;
+        p.y += (p.vy || 0) * dt;
+        p.angle = (p.angle || 0) + (p.vAngle || 0) * dt;
+      }
+      if (p.timer >= (p.duration || 0.45) || p.life <= 0) {
         this.particles.splice(i, 1);
       }
     }
   }
 
   spawnEnemy() {
-    if (this.enemiesRemainingInWave <= 0) return;
-    this.enemiesRemainingInWave--;
+    if (!this.abyssFlies || this.abyssFlies.length === 0) {
+      this.enemiesRemainingInWave = 0;
+      return;
+    }
 
-    const lane = Math.floor(Math.random() * this.web.laneCount);
-    const rand = Math.random();
+    // Pop exactly one buzzing fly from the abyss: it departs the center and enters the tube!
+    const fly = this.abyssFlies.shift();
+    this.enemiesRemainingInWave = this.abyssFlies.length;
 
-    // Wave 1: Flippers ONLY (matching authentic 1981 Atari Tempest Level 1 specifications)
-    if (this.level === 1) {
-      this.flippers.push({
+    const lane = Math.floor(fly.lane) % this.web.laneCount;
+
+    if (fly.type === 'pulsar') {
+      this.pulsars.push({
         lane: lane,
         z: 0.0,
-        speed: 0.22,
-        isSwirling: true,
-        swirlLane: lane,
-        swirlSpeed: (Math.random() < 0.5 ? 1 : -1) * (1.6 + Math.random() * 1.2),
-        swirlTimer: 1.4 + Math.random() * 2.2, // Swirl in abyss before picking a lane to climb
-        isFlipping: false,
-        flipProgress: 0,
-        flipSourceLane: lane,
-        flipTargetLane: lane,
-        flipCooldown: 0.9 + Math.random() * 1.2,
-        onRim: false,
-        rimDirection: Math.random() < 0.5 ? 1 : -1,
-        rimMoveTimer: 0,
-        color: '#ff0000',
-        shootTimer: 2.2 + Math.random() * 2.5
+        speed: 0.17 + this.level * 0.01,
+        pulseTimer: Math.random() * 1.2,
+        pulseHeight: 0.0,
+        isElectrified: false,
+        color: '#ffff00'
       });
       return;
     }
 
-    // On wave >= 3, introduce Tankers (OPTANK from ALWELG.MAC)
-    if (this.level >= 3 && rand < 0.22) {
+    if (fly.type === 'fuseball') {
+      const rib = Math.floor(Math.random() * this.web.vertexCount);
+      this.fuseballs.push({
+        rib: rib,
+        z: 0.05,
+        speed: 0.46 + this.level * 0.015,
+        dir: 1,
+        reverseTimer: 0.3 + Math.random() * 0.5,
+        colorTimer: 0,
+        color: '#00e5ff'
+      });
+      return;
+    }
+
+    if (fly.type === 'tanker') {
       this.tankers.push({
         lane: lane,
         z: 0.0,
         speed: 0.18 + this.level * 0.012,
         pulseTimer: 0,
+        type: fly.subType || 'flipper',
         color: '#cc00ff'
       });
-    } else if (rand < 0.55) {
-      // Spiker
+      return;
+    }
+
+    if (fly.type === 'spiker') {
       this.spikers.push({
         lane: lane,
         z: 0.0,
@@ -346,46 +432,49 @@ export class EnemyManager {
         rotation: 0,
         color: '#00ff00'
       });
-    } else {
-      // Flipper
-      this.flippers.push({
-        lane: lane,
-        z: 0.0,
-        speed: 0.22 + (this.level * 0.018),
-        isSwirling: true,
-        swirlLane: lane,
-        swirlSpeed: (Math.random() < 0.5 ? 1 : -1) * (1.6 + Math.random() * 1.2),
-        swirlTimer: 1.2 + Math.random() * 2.0,
-        isFlipping: false,
-        flipProgress: 0,
-        flipSourceLane: lane,
-        flipTargetLane: lane,
-        flipCooldown: 0.8 + Math.random() * 1.2,
-        onRim: false,
-        rimDirection: Math.random() < 0.5 ? 1 : -1,
-        rimMoveTimer: 0,
-        color: '#ff0000',
-        shootTimer: 1.8 + Math.random() * 2.5
-      });
+      return;
     }
+
+    // Default: Flipper
+    this.flippers.push({
+      lane: lane,
+      z: 0.0,
+      speed: 0.22 + (this.level * 0.018),
+      isSwirling: true,
+      swirlLane: lane,
+      swirlSpeed: (Math.random() < 0.5 ? 1 : -1) * (1.6 + Math.random() * 1.2),
+      swirlTimer: 1.0 + Math.random() * 1.6,
+      isFlipping: false,
+      flipProgress: 0,
+      flipSourceLane: lane,
+      flipTargetLane: lane,
+      flipCooldown: 0.8 + Math.random() * 1.2,
+      onRim: false,
+      rimDirection: Math.random() < 0.5 ? 1 : -1,
+      rimMoveTimer: 0,
+      color: '#ff0000',
+      shootTimer: 1.8 + Math.random() * 2.5
+    });
   }
 
   update(dt, player, audio, onScore) {
     let maxZ = 0;
 
-    // 1. Spawning
-    if (this.enemiesRemainingInWave > 0) {
+    // 1. Spawning from Abyss Queue
+    if (this.abyssFlies && this.abyssFlies.length > 0) {
       this.spawnTimer -= dt;
       if (this.spawnTimer <= 0) {
         this.spawnEnemy();
-        this.spawnTimer = this.spawnInterval + (Math.random() * 0.4 - 0.2);
+        this.spawnTimer = this.spawnInterval + (Math.random() * 0.3 - 0.15);
       }
     }
 
     // Update abyss fly dots buzzing around center hole
-    for (const fly of this.abyssFlies) {
-      fly.lane = (fly.lane + fly.speed * dt + this.web.laneCount) % this.web.laneCount;
-      fly.flutterPhase += dt * fly.flutterFreq;
+    if (this.abyssFlies) {
+      for (const fly of this.abyssFlies) {
+        fly.lane = (fly.lane + fly.speed * dt + this.web.laneCount) % this.web.laneCount;
+        fly.flutterPhase += dt * fly.flutterFreq;
+      }
     }
 
     // 2. Update Spikers
@@ -427,6 +516,73 @@ export class EnemyManager {
       if (tanker.z >= 0.98) {
         // Tanker splits at rim into two Flippers
         this._splitTanker(tanker, i, audio);
+      }
+    }
+
+    // 3b. Update Pulsars
+    for (let i = this.pulsars.length - 1; i >= 0; i--) {
+      const pulsar = this.pulsars[i];
+      pulsar.z += pulsar.speed * dt;
+      pulsar.pulseTimer += dt;
+
+      // Oscillate pulse height between 0.0 (flat dormant) and 1.0 (tall electrified)
+      const cycle = (pulsar.pulseTimer % 1.2) / 1.2;
+      pulsar.pulseHeight = Math.max(0, Math.sin(cycle * Math.PI * 2));
+      pulsar.isElectrified = (pulsar.pulseHeight > 0.42);
+
+      if (pulsar.z > maxZ) maxZ = pulsar.z;
+
+      // If electrified pulsar touches player's claw near rim (z >= 0.85)
+      if (player && player.isAlive && player.lane === pulsar.lane && pulsar.z >= 0.85 && pulsar.isElectrified) {
+        if (player.spawnGraceTimer <= 0) {
+          player.kill(audio, this, this.web);
+          return;
+        }
+      }
+
+      if (pulsar.z >= 1.0) {
+        this.pulsars.splice(i, 1);
+      }
+    }
+
+    // 3c. Update Fuseballs
+    const FUSEBALL_COLORS = ['#ff0055', '#00e5ff', '#ffff00', '#00ff44', '#ffffff', '#cc00ff'];
+    for (let i = this.fuseballs.length - 1; i >= 0; i--) {
+      const fuseball = this.fuseballs[i];
+      fuseball.z += (fuseball.dir || 1) * fuseball.speed * dt;
+      fuseball.reverseTimer -= dt;
+      fuseball.colorTimer += dt;
+      fuseball.color = FUSEBALL_COLORS[Math.floor(fuseball.colorTimer / 0.06) % FUSEBALL_COLORS.length];
+
+      if (fuseball.z > maxZ) maxZ = fuseball.z;
+
+      if (fuseball.reverseTimer <= 0) {
+        fuseball.dir = -fuseball.dir;
+        fuseball.reverseTimer = 0.25 + Math.random() * 0.6;
+      }
+
+      if (fuseball.z <= 0.02) {
+        fuseball.z = 0.02;
+        fuseball.dir = 1;
+      } else if (fuseball.z >= 1.0) {
+        fuseball.z = 1.0;
+        fuseball.dir = -1;
+        // Occasionally switch to adjacent rib on rim
+        if (Math.random() < 0.5) {
+          fuseball.rib = (fuseball.rib + (Math.random() < 0.5 ? 1 : -1) + this.web.vertexCount) % this.web.vertexCount;
+        }
+      }
+
+      // If fuseball on rim touches player's claw
+      if (player && player.isAlive && fuseball.z >= 0.88) {
+        const leftRib = player.lane;
+        const rightRib = (player.lane + 1) % this.web.vertexCount;
+        if (fuseball.rib === leftRib || fuseball.rib === rightRib) {
+          if (player.spawnGraceTimer <= 0) {
+            player.kill(audio, this, this.web);
+            return;
+          }
+        }
       }
     }
 
@@ -487,8 +643,7 @@ export class EnemyManager {
                 if (onScore) onScore(150);
                 continue;
               } else {
-                player.kill(audio);
-                this.createExplosion(this.web.getLaneCenter(player.lane, 1.0), '#ffff00', 30);
+                player.kill(audio, this, this.web);
               }
             }
           }
@@ -529,8 +684,7 @@ export class EnemyManager {
               if (onScore) onScore(150);
               continue;
             } else {
-              player.kill(audio);
-              this.createExplosion(this.web.getLaneCenter(player.lane, 1.0), '#ffff00', 30);
+              player.kill(audio, this, this.web);
             }
           }
         }
@@ -588,8 +742,7 @@ export class EnemyManager {
               if (onScore) onScore(150);
               continue;
             } else {
-              player.kill(audio);
-              this.createExplosion(this.web.getLaneCenter(player.lane, 1.0), '#ffff00', 30);
+              player.kill(audio, this, this.web);
             }
           }
         }
@@ -608,8 +761,7 @@ export class EnemyManager {
           this.enemyBullets.splice(i, 1);
           continue;
         } else {
-          player.kill(audio);
-          this.createExplosion(this.web.getLaneCenter(player.lane, 1.0), '#ffff00', 30);
+          player.kill(audio, this, this.web);
           this.enemyBullets.splice(i, 1);
           continue;
         }
@@ -645,12 +797,47 @@ export class EnemyManager {
         const spiker = this.spikers[i];
         if (spiker.lane === shot.lane && Math.abs(spiker.z - shot.z) < 0.09) {
           const pt = this.web.getLaneCenter(spiker.lane, spiker.z);
-          this.createExplosion(pt, spiker.color, 24);
+          this.createExplosion(pt, '#ffffff', 1, spiker.lane, spiker.z);
           this.spikers.splice(i, 1);
           shot.active = false;
           shotHit = true;
           if (audio) audio.playExplosion(false);
           if (onScore) onScore(50);
+          break;
+        }
+      }
+      if (shotHit) continue;
+
+      // Check Pulsars
+      for (let i = this.pulsars.length - 1; i >= 0; i--) {
+        const p = this.pulsars[i];
+        if (p.lane === shot.lane && Math.abs(p.z - shot.z) < 0.12) {
+          const pt = this.web.getLaneCenter(p.lane, p.z);
+          this.createExplosion(pt, '#00ffff', 1, p.lane, p.z);
+          this.pulsars.splice(i, 1);
+          shot.active = false;
+          shotHit = true;
+          if (audio) audio.playExplosion(false);
+          if (onScore) onScore(200);
+          break;
+        }
+      }
+      if (shotHit) continue;
+
+      // Check Fuseballs
+      for (let i = this.fuseballs.length - 1; i >= 0; i--) {
+        const f = this.fuseballs[i];
+        const leftRib = shot.lane;
+        const rightRib = (shot.lane + 1) % this.web.vertexCount;
+        if ((f.rib === leftRib || f.rib === rightRib) && Math.abs(f.z - shot.z) < 0.12) {
+          const pt = this.web.getVertexPos(f.rib, f.z);
+          this.createExplosion(pt, '#ffff00', 1, shot.lane, f.z);
+          const pts = (f.z < 0.33) ? 750 : ((f.z < 0.66) ? 500 : 250);
+          this.fuseballs.splice(i, 1);
+          shot.active = false;
+          shotHit = true;
+          if (audio) audio.playExplosion(false);
+          if (onScore) onScore(pts);
           break;
         }
       }
@@ -665,7 +852,7 @@ export class EnemyManager {
           const closedDiff = this.web.isClosed ? Math.min(laneDiff, this.web.laneCount - laneDiff) : laneDiff;
           if (shot.z <= 0.08 && closedDiff < 0.75) {
             const pt = this.web.getLaneCenter(shot.lane, 0.0);
-            this.createExplosion(pt, flipper.color || '#ff0000', 30);
+            this.createExplosion(pt, '#ffffff', 1, shot.lane, 0.0);
             this.flippers.splice(i, 1);
             shot.active = false;
             shotHit = true;
@@ -691,7 +878,7 @@ export class EnemyManager {
           if (zHit) {
             const explodeLane = (flipper.isFlipping && shot.lane === flipper.flipTargetLane) ? flipper.flipTargetLane : flipper.lane;
             const pt = this.web.getLaneCenter(explodeLane, flipper.z);
-            this.createExplosion(pt, flipper.color, 28);
+            this.createExplosion(pt, '#ffffff', 1, explodeLane, flipper.z);
             this.flippers.splice(i, 1);
             shot.active = false;
             shotHit = true;
@@ -708,7 +895,7 @@ export class EnemyManager {
         if (this.web.isClosed) diff = Math.min(diff, this.web.laneCount - diff);
         if (shot.z <= 0.05 && diff < 0.65) {
           const pt = this.web.getLaneCenter(shot.lane, 0.0);
-          this.createExplosion(pt, '#ff2233', 12);
+          this.createExplosion(pt, '#ffffff', 1, shot.lane, 0.0);
           fly.lane = (fly.lane + this.web.laneCount * 0.5) % this.web.laneCount;
           shot.active = false;
           shotHit = true;
@@ -724,7 +911,7 @@ export class EnemyManager {
         shot.active = false;
         const newZ = spikeZ - 0.09;
         const pt = this.web.getLaneCenter(shot.lane, spikeZ);
-        this.createExplosion(pt, '#00ff55', 12);
+        this.createExplosion(pt, '#ffffff', 1, shot.lane, spikeZ);
         if (audio) audio.playSpikeChip();
 
         if (newZ <= 0.05) {
@@ -736,14 +923,17 @@ export class EnemyManager {
       }
     }
 
-    // 7. Update Particles
+    // 7. Update Particles / Sunburst Explosions / Shards
     for (let i = this.particles.length - 1; i >= 0; i--) {
       const p = this.particles[i];
-      p.x += p.vx * dt;
-      p.y += p.vy * dt;
-      p.life -= dt;
-      p.alpha = Math.max(0, p.life / p.maxLife);
-      if (p.life <= 0) {
+      p.timer = (p.timer || 0) + dt;
+      p.life = (p.life !== undefined ? p.life : (p.duration || 0.45)) - dt;
+      if (p.isShard) {
+        p.x += (p.vx || 0) * dt;
+        p.y += (p.vy || 0) * dt;
+        p.angle = (p.angle || 0) + (p.vAngle || 0) * dt;
+      }
+      if (p.timer >= (p.duration || 0.45) || p.life <= 0) {
         this.particles.splice(i, 1);
       }
     }
@@ -753,93 +943,205 @@ export class EnemyManager {
     if (audio && audio.isPulsing) {
       audio.updatePulsationRate(maxZ);
     }
+    if (audio && audio.updatePulsarHum) {
+      audio.updatePulsarHum(this.pulsars);
+    }
   }
 
   _splitTanker(tanker, index, audio) {
     const pt = this.web.getLaneCenter(tanker.lane, tanker.z);
-    this.createExplosion(pt, tanker.color, 32);
+    this.createExplosion(pt, '#ffffff', 1, tanker.lane, tanker.z);
     this.tankers.splice(index, 1);
     if (audio) audio.playExplosion(true);
 
-    // Spawn 2 flippers into adjacent lanes
     const lane1 = tanker.lane;
     const lane2 = this.web.clampLane(tanker.lane + 1);
 
-    this.flippers.push({
-      lane: lane1,
-      z: tanker.z,
-      speed: 0.25,
-      isFlipping: false,
-      flipProgress: 0,
-      flipSourceLane: lane1,
-      flipTargetLane: lane1,
-      flipCooldown: 0.8,
-      onRim: false,
-      rimDirection: 1,
-      rimMoveTimer: 0,
-      color: '#ff0000',
-      shootTimer: 2.0
-    });
+    if (tanker.type === 'pulsar') {
+      this.pulsars.push({
+        lane: lane1,
+        z: tanker.z,
+        speed: 0.18,
+        pulseTimer: 0,
+        pulseHeight: 0.0,
+        isElectrified: false,
+        color: '#ffff00'
+      });
+      this.pulsars.push({
+        lane: lane2,
+        z: tanker.z,
+        speed: 0.18,
+        pulseTimer: 0.6,
+        pulseHeight: 0.0,
+        isElectrified: false,
+        color: '#ffff00'
+      });
+    } else if (tanker.type === 'fuse' || tanker.type === 'fuseball') {
+      const [vL, vR] = this.web.getLaneIndices(tanker.lane);
+      this.fuseballs.push({
+        rib: vL,
+        z: tanker.z,
+        speed: 0.45,
+        dir: 1,
+        reverseTimer: 0.4,
+        colorTimer: 0,
+        color: '#00e5ff'
+      });
+      this.fuseballs.push({
+        rib: vR,
+        z: tanker.z,
+        speed: 0.45,
+        dir: -1,
+        reverseTimer: 0.4,
+        colorTimer: 0,
+        color: '#ff0055'
+      });
+    } else {
+      // Spawn 2 flippers into adjacent lanes
+      this.flippers.push({
+        lane: lane1,
+        z: tanker.z,
+        speed: 0.25,
+        isFlipping: false,
+        flipProgress: 0,
+        flipSourceLane: lane1,
+        flipTargetLane: lane1,
+        flipCooldown: 0.8,
+        onRim: false,
+        rimDirection: 1,
+        rimMoveTimer: 0,
+        color: '#ff0000',
+        shootTimer: 2.0
+      });
 
-    this.flippers.push({
-      lane: lane2,
-      z: tanker.z,
-      speed: 0.25,
-      isFlipping: false,
-      flipProgress: 0,
-      flipSourceLane: lane2,
-      flipTargetLane: lane2,
-      flipCooldown: 0.8,
-      onRim: false,
-      rimDirection: -1,
-      rimMoveTimer: 0,
-      color: '#ff0000',
-      shootTimer: 2.0
+      this.flippers.push({
+        lane: lane2,
+        z: tanker.z,
+        speed: 0.25,
+        isFlipping: false,
+        flipProgress: 0,
+        flipSourceLane: lane2,
+        flipTargetLane: lane2,
+        flipCooldown: 0.8,
+        onRim: false,
+        rimDirection: -1,
+        rimMoveTimer: 0,
+        color: '#ff0000',
+        shootTimer: 2.0
+      });
+    }
+  }
+
+  createExplosion(pos, color = '#ffffff', count = 1, lane = -1, z = 1.0) {
+    // Authentic 1981 Atari Tempest stationary white sunburst explosion
+    this.particles.push({
+      isSunburst: true,
+      x: pos ? pos.x : 0,
+      y: pos ? pos.y : 0,
+      lane: lane,
+      z: z,
+      timer: 0,
+      duration: 0.45,
+      life: 0.45,
+      maxLife: 0.45,
+      color: color || '#ffffff'
     });
   }
 
-  createExplosion(pos, color, count = 22) {
-    for (let i = 0; i < count; i++) {
-      const angle = Math.random() * Math.PI * 2;
-      const speed = 18 + Math.random() * 45;
-      const life = 0.35 + Math.random() * 0.45;
-      this.particles.push({
-        x: pos.x,
-        y: pos.y,
-        vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed,
-        length: 5 + Math.random() * 10,
-        angle: angle,
-        color: color,
-        life: life,
-        maxLife: life,
-        alpha: 1.0
-      });
+  /**
+   * Generates a spectacular vector Claw shatter explosion:
+   * 16 glowing vector shards that fly outward with rotational velocity and decaying brilliance,
+   * plus a central white sunburst flash at the player's exact 3D tube position!
+   */
+  createClawExplosion(lane, z = 1.0, web) {
+    if (!web) web = this.web;
+    const centerPt = web ? web.getLaneCenter(lane, z) : { x: 0, y: 0 };
+
+    // 1. Core stationary brilliant sunburst flash
+    this.particles.push({
+      isSunburst: true,
+      x: centerPt.x,
+      y: centerPt.y,
+      lane: lane,
+      z: z,
+      timer: 0,
+      duration: 1.1,
+      life: 1.1,
+      maxLife: 1.1,
+      color: '#ffffff'
+    });
+
+    // 2. 16 Vector line shard fragments that shatter and scatter in 3D
+    const edges = web ? web.getLaneEdges(lane, z) : null;
+    if (edges) {
+      const pL = edges.left;
+      const pR = edges.right;
+      const midX = (pL.x + pR.x) * 0.5;
+      const midY = (pL.y + pR.y) * 0.5;
+      const dx = pR.x - pL.x;
+      const dy = pR.y - pL.y;
+      const W = Math.hypot(dx, dy) || 24;
+      const ux = dx / W;
+      const uy = dy / W;
+      const nx = -uy;
+      const ny = ux;
+
+      const shardColors = ['#ffff00', '#ffea00', '#ff3344', '#ffffff', '#ffaa00'];
+
+      for (let i = 0; i < 16; i++) {
+        const uOffset = (Math.random() - 0.5) * W * 1.2;
+        const nOffset = (Math.random() - 0.5) * W * 0.8;
+        const originX = midX + ux * uOffset + nx * nOffset;
+        const originY = midY + uy * uOffset + ny * nOffset;
+
+        const outDirX = (originX - midX) / (W * 0.5 || 1);
+        const outDirY = (originY - midY) / (W * 0.5 || 1);
+        const speed = 25 + Math.random() * 45;
+
+        this.particles.push({
+          isShard: true,
+          x: originX,
+          y: originY,
+          lane: lane,
+          z: z,
+          vx: outDirX * speed + (Math.random() - 0.5) * 15,
+          vy: outDirY * speed + (Math.random() - 0.5) * 15,
+          length: (W * 0.2) + Math.random() * (W * 0.35),
+          angle: Math.random() * Math.PI * 2,
+          vAngle: (Math.random() - 0.5) * 16,
+          timer: 0,
+          duration: 1.5,
+          life: 1.5,
+          color: shardColors[i % shardColors.length],
+          lineWidth: 2.8
+        });
+      }
     }
   }
 
   killAllEnemies() {
     let count = 0;
-    const all = [...this.flippers, ...this.spikers, ...this.tankers];
+    const all = [...this.flippers, ...this.spikers, ...this.tankers, ...this.pulsars, ...this.fuseballs];
     for (const e of all) {
-      const pt = this.web.getLaneCenter(e.lane, e.z);
-      this.createExplosion(pt, e.color || '#ff00aa', 24);
+      const pt = (e.rib !== undefined) ? this.web.getVertexPos(e.rib, e.z) : this.web.getLaneCenter(e.lane, e.z);
+      this.createExplosion(pt, '#ffffff', 1, e.lane !== undefined ? e.lane : -1, e.z);
       count++;
     }
     this.flippers = [];
     this.spikers = [];
     this.tankers = [];
+    this.pulsars = [];
+    this.fuseballs = [];
     this.enemyBullets = [];
     return count * 100;
   }
 
   killRandomEnemy() {
-    const list = [...this.flippers, ...this.spikers, ...this.tankers];
+    const list = [...this.flippers, ...this.spikers, ...this.tankers, ...this.pulsars, ...this.fuseballs];
     if (list.length === 0) return 0;
-
     const target = list[Math.floor(Math.random() * list.length)];
-    const pt = this.web.getLaneCenter(target.lane, target.z);
-    this.createExplosion(pt, target.color || '#ff00aa', 24);
+    const pt = (target.rib !== undefined) ? this.web.getVertexPos(target.rib, target.z) : this.web.getLaneCenter(target.lane, target.z);
+    this.createExplosion(pt, '#ffffff', 1, target.lane !== undefined ? target.lane : -1, target.z);
 
     const fIdx = this.flippers.indexOf(target);
     if (fIdx >= 0) this.flippers.splice(fIdx, 1);
@@ -847,14 +1149,21 @@ export class EnemyManager {
     if (sIdx >= 0) this.spikers.splice(sIdx, 1);
     const tIdx = this.tankers.indexOf(target);
     if (tIdx >= 0) this.tankers.splice(tIdx, 1);
+    const pIdx = this.pulsars.indexOf(target);
+    if (pIdx >= 0) this.pulsars.splice(pIdx, 1);
+    const fbIdx = this.fuseballs.indexOf(target);
+    if (fbIdx >= 0) this.fuseballs.splice(fbIdx, 1);
 
     return 100;
   }
 
   isWaveCleared() {
-    return this.enemiesRemainingInWave <= 0 &&
+    return (!this.abyssFlies || this.abyssFlies.length === 0) &&
+      this.enemiesRemainingInWave <= 0 &&
       this.flippers.length === 0 &&
       this.spikers.length === 0 &&
-      this.tankers.length === 0;
+      this.tankers.length === 0 &&
+      this.pulsars.length === 0 &&
+      this.fuseballs.length === 0;
   }
 }

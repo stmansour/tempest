@@ -2,10 +2,10 @@
  * main.js - Application Entry Point & Game Loop Coordinator
  */
 
-import { VectorRenderer } from './renderer.js';
-import { AudioManager } from './audio.js';
-import { InputManager } from './input.js';
-import { Game, GameState } from './game.js';
+import { VectorRenderer } from './renderer.js?v=warp_stage3_unified';
+import { AudioManager } from './audio.js?v=warp_stage3_unified';
+import { InputManager } from './input.js?v=warp_stage3_unified';
+import { Game, GameState } from './game.js?v=warp_stage3_unified';
 
 if ('scrollRestoration' in history) {
   history.scrollRestoration = 'manual';
@@ -16,8 +16,6 @@ window.addEventListener('DOMContentLoaded', () => {
   const coinButton = document.getElementById('coin-button');
   const creditsVal = document.getElementById('credits-val');
   const startButton = document.getElementById('start-button');
-  const lockButton = document.getElementById('lock-button');
-  const lockStatusText = document.getElementById('lock-status-text');
   const fireButton = document.getElementById('fire-button');
   const zapButton = document.getElementById('zap-button');
   const warpButton = document.getElementById('warp-button');
@@ -39,11 +37,25 @@ window.addEventListener('DOMContentLoaded', () => {
   const game = new Game(renderer, audio, input);
   window.game = game;
 
-  // URL parameter to optionally jump directly to a level (e.g. ?level=8)
+  // URL parameter parsing:
+  // ?level=N (jump to level), ?debug=1 or ?vp=1 (vanishing point overlay), ?god=1 (invulnerability), ?warp=1 (trigger warp immediately)
   const urlParams = new URLSearchParams(window.location.search);
   const startLevelParam = parseInt(urlParams.get('level'), 10);
+  if (urlParams.get('debug') === '1' || urlParams.get('vp') === '1') {
+    renderer.showDebugOverlay = true;
+  }
+  if (urlParams.get('god') === '1') {
+    game.godMode = true;
+  }
+
   if (!isNaN(startLevelParam) && startLevelParam >= 1) {
     game.startNewGame(startLevelParam, 0);
+    if (urlParams.get('warp') === '1') {
+      setTimeout(() => game.triggerLevelWarp(), 200);
+    }
+  } else if (urlParams.get('warp') === '1') {
+    game.startNewGame(1, 0);
+    setTimeout(() => game.triggerLevelWarp(), 200);
   }
 
   // Global Audio Unlock Listener (resumes AudioContext on interaction)
@@ -68,18 +80,6 @@ window.addEventListener('DOMContentLoaded', () => {
   requestAnimationFrame(handleResize);
   setTimeout(handleResize, 100);
 
-  // Pointer Lock change listener
-  input.onLockChange = (isLocked) => {
-    if (lockStatusText && lockButton) {
-      if (isLocked) {
-        lockStatusText.textContent = 'SPINNER: LOCKED';
-        lockButton.classList.add('locked');
-      } else {
-        lockStatusText.textContent = 'SPINNER: UNLOCKED';
-        lockButton.classList.remove('locked');
-      }
-    }
-  };
 
   // Coin insertion button
   if (coinButton) {
@@ -113,20 +113,6 @@ window.addEventListener('DOMContentLoaded', () => {
         game._commitRateYourself();
       } else {
         game.startNewGame();
-      }
-    });
-  }
-
-  // Spinner lock toggle button (explicit opt-in)
-  if (lockButton) {
-    lockButton.addEventListener('click', () => {
-      unlockAudio();
-      lockButton.blur();
-      canvas.focus();
-      if (input.isLocked) {
-        document.exitPointerLock();
-      } else {
-        input.requestLock();
       }
     });
   }
@@ -168,45 +154,54 @@ window.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Steering Mode & Calibration Buttons
-  const modePrecisionBtn = document.getElementById('mode-precision');
-  const modeTapBtn = document.getElementById('mode-tap');
-  const modeFastBtn = document.getElementById('mode-fast');
+  // Slide-out Arcade Guide Drawer Controllers
+  const guideToggleBtn = document.getElementById('guide-toggle-btn');
+  const guideDrawer = document.getElementById('arcade-guide-drawer');
+  const drawerBackdrop = document.getElementById('drawer-backdrop');
+  const drawerCloseBtn = document.getElementById('drawer-close-btn');
 
-  function updateModeButtons(activeBtn) {
-    [modePrecisionBtn, modeTapBtn, modeFastBtn].forEach(btn => {
-      if (btn) btn.classList.remove('active');
-    });
-    if (activeBtn) activeBtn.classList.add('active');
+  function openGuideDrawer() {
+    if (guideDrawer && drawerBackdrop) {
+      guideDrawer.classList.add('open');
+      drawerBackdrop.classList.add('active');
+      game._updateSidebarLeaderboard();
+    }
   }
 
-  if (modePrecisionBtn) {
-    modePrecisionBtn.addEventListener('click', () => {
-      unlockAudio();
-      modePrecisionBtn.blur();
+  function closeGuideDrawer() {
+    if (guideDrawer && drawerBackdrop) {
+      guideDrawer.classList.remove('open');
+      drawerBackdrop.classList.remove('active');
       canvas.focus();
-      input.setControlMode('precision');
-      updateModeButtons(modePrecisionBtn);
+    }
+  }
+
+  function toggleGuideDrawer() {
+    if (guideDrawer && guideDrawer.classList.contains('open')) {
+      closeGuideDrawer();
+    } else {
+      openGuideDrawer();
+    }
+  }
+
+  if (guideToggleBtn) {
+    guideToggleBtn.addEventListener('click', () => {
+      unlockAudio();
+      guideToggleBtn.blur();
+      toggleGuideDrawer();
     });
   }
 
-  if (modeTapBtn) {
-    modeTapBtn.addEventListener('click', () => {
+  if (drawerCloseBtn) {
+    drawerCloseBtn.addEventListener('click', () => {
       unlockAudio();
-      modeTapBtn.blur();
-      canvas.focus();
-      input.setControlMode('tap-only');
-      updateModeButtons(modeTapBtn);
+      closeGuideDrawer();
     });
   }
 
-  if (modeFastBtn) {
-    modeFastBtn.addEventListener('click', () => {
-      unlockAudio();
-      modeFastBtn.blur();
-      canvas.focus();
-      input.setControlMode('fast');
-      updateModeButtons(modeFastBtn);
+  if (drawerBackdrop) {
+    drawerBackdrop.addEventListener('click', () => {
+      closeGuideDrawer();
     });
   }
 
@@ -250,8 +245,63 @@ window.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Start game or insert coin with keyboard in Attract mode
+  // Keyboard interactions across game states
   window.addEventListener('keydown', (e) => {
+    // Arcade Guide Drawer toggle (Tab / Escape / H)
+    if (e.code === 'Tab') {
+      e.preventDefault();
+      toggleGuideDrawer();
+      return;
+    }
+    if (e.code === 'Escape') {
+      if (guideDrawer && guideDrawer.classList.contains('open')) {
+        e.preventDefault();
+        closeGuideDrawer();
+        return;
+      }
+    }
+    if (e.code === 'KeyH' && !e.ctrlKey && !e.metaKey && game.state !== GameState.NAME_ENTRY) {
+      e.preventDefault();
+      toggleGuideDrawer();
+      return;
+    }
+
+    // Diagnostic Vanishing Point overlay toggle ('V' or 'D')
+    if (e.code === 'KeyV' || (e.ctrlKey && e.code === 'KeyD')) {
+      e.preventDefault();
+      renderer.toggleDebugOverlay();
+      return;
+    }
+
+    // Live Visual Vanishing Point nudging controls when overlay is active
+    if (renderer.showDebugOverlay) {
+      if (e.code === 'KeyI') {
+        e.preventDefault();
+        game.nudgeVisualCenter(0, -1.0);
+        return;
+      } else if (e.code === 'KeyK') {
+        e.preventDefault();
+        game.nudgeVisualCenter(0, 1.0);
+        return;
+      } else if (e.code === 'KeyJ') {
+        e.preventDefault();
+        game.nudgeVisualCenter(-1.0, 0);
+        return;
+      } else if (e.code === 'KeyL') {
+        e.preventDefault();
+        game.nudgeVisualCenter(1.0, 0);
+        return;
+      } else if (e.code === 'KeyR' && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        game.resetVisualCenter();
+        return;
+      } else if (e.code === 'KeyP') {
+        e.preventDefault();
+        game.printVisualCenterConfig();
+        return;
+      }
+    }
+
     if (game.state === GameState.ATTRACT) {
       if (['Space', 'Enter', 'Digit1', 'KeyC', 'ArrowLeft', 'ArrowRight', 'KeyA', 'KeyD'].includes(e.code)) {
         e.preventDefault();

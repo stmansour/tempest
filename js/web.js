@@ -8,15 +8,71 @@
  */
 
 export class Web {
-  constructor(id, name, outerRim, innerHole, isClosed = true, strokeColor = '#00ffff') {
+  constructor(id, name, outerRim, innerHole, isClosed = true, strokeColor = '#00ffff', vanish = null) {
     this.id = id;
     this.name = name;
     this.outerRim = outerRim; // Array of {x, y} in world units [-85.1, +85.1]
     this.innerHole = innerHole; // Array of {x, y} in world units at abyss spawn (z=0)
     this.isClosed = isClosed;
     this.strokeColor = strokeColor;
+    this.vanish = vanish;
     this.vertexCount = outerRim.length;
     this.laneCount = isClosed ? this.vertexCount : this.vertexCount - 1;
+
+    // Pre-calculate exact 2D bounding box and dimensions for responsive screen sizing
+    let minX = Infinity, maxX = -Infinity;
+    let minY = Infinity, maxY = -Infinity;
+    const allPts = outerRim.concat(innerHole);
+    for (const p of allPts) {
+      if (p.x < minX) minX = p.x;
+      if (p.x > maxX) maxX = p.x;
+      if (p.y < minY) minY = p.y;
+      if (p.y > maxY) maxY = p.y;
+    }
+    this.bounds = {
+      minX,
+      maxX,
+      minY,
+      maxY,
+      width: Math.max(1, maxX - minX),
+      height: Math.max(1, maxY - minY),
+      centerX: (minX + maxX) * 0.5,
+      centerY: (minY + maxY) * 0.5
+    };
+
+    // Calculate visual vanishing point / center of tube shape
+    if (this.isClosed && this.innerHole && this.innerHole.length > 0) {
+      let sumX = 0, sumY = 0;
+      for (const p of this.innerHole) {
+        sumX += p.x;
+        sumY += p.y;
+      }
+      this.visualCenter = {
+        x: sumX / this.innerHole.length,
+        y: sumY / this.innerHole.length
+      };
+    } else if (this.vanish) {
+      this.visualCenter = { x: this.vanish.x, y: this.vanish.y };
+    } else if (this.innerHole && this.innerHole.length > 0) {
+      let sumX = 0, sumY = 0;
+      for (const p of this.innerHole) {
+        sumX += p.x;
+        sumY += p.y;
+      }
+      this.visualCenter = {
+        x: sumX / this.innerHole.length,
+        y: sumY / this.innerHole.length
+      };
+    } else {
+      this.visualCenter = { x: 0, y: 0 };
+    }
+  }
+
+  /**
+   * Returns the visual center / vanishing point of this tube shape in world units
+   */
+  getVisualCenter() {
+    return this.visualCenter || { x: 0, y: 0 };
   }
 
   /**
@@ -248,14 +304,23 @@ export function createLevelWeb(waveNumber) {
 }
 
 /**
+ * Fine-tuning overrides for visual vanishing points / tube centers
+ * (Can be customized if any shape needs visual tweaking)
+ */
+export const WELL_VISUAL_CENTER_OVERRIDES = {
+  // e.g. [wellId]: { x: 0, y: 30.0 }
+};
+
+/**
  * Builds authentic webs using the exact 3D projective coordinates from ALDIS2.MAC
  */
 export function buildAuthenticWeb(wellId, color = '#00ffff') {
   const data = AUTHENTIC_WELLS_DATA[wellId] || AUTHENTIC_WELLS_DATA[0];
   const outer = data.outer.map(p => ({ x: p[0], y: p[1] }));
   const inner = data.inner.map(p => ({ x: p[0], y: p[1] }));
+  const vanish = WELL_VISUAL_CENTER_OVERRIDES[wellId] || data.vanish;
 
-  return new Web(data.id, data.name, outer, inner, data.isClosed, color);
+  return new Web(data.id, data.name, outer, inner, data.isClosed, color, vanish);
 }
 
 /**
