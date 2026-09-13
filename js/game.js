@@ -9,9 +9,26 @@
  * - GAME_OVER: High score recording, return to attract
  */
 
-import { createLevelWeb, WELL_VISUAL_CENTER_OVERRIDES } from './web.js?v=warp_stage3_unified';
+import { createLevelWeb, WELL_VISUAL_CENTER_OVERRIDES, WELL_SEQUENCE } from './web.js?v=warp_stage3_unified';
 import { Player } from './player.js?v=warp_stage3_unified';
 import { EnemyManager } from './enemies.js?v=warp_stage3_unified';
+
+/**
+ * OPERATOR DIP SWITCH SETTINGS (Atari Tempest PCB L12)
+ *
+ * BONUS_LIFE_INTERVAL: Score interval required to earn an extra Claw Blaster.
+ * Set this value to change the score milestone for bonus claws.
+ * Matches Atari QuadraScan PCB toggle switches 3, 4 & 5:
+ *   10000 : Bonus claw every 10,000 pts (SW 3-5: ON, ON, OFF)
+ *   20000 : Bonus claw every 20,000 pts (SW 3-5: ON, ON, ON) - Atari Factory Default
+ *   30000 : Bonus claw every 30,000 pts (SW 3-5: ON, OFF, ON)
+ *   40000 : Bonus claw every 40,000 pts (SW 3-5: ON, OFF, OFF)
+ *   50000 : Bonus claw every 50,000 pts (SW 3-5: OFF, ON, ON)
+ *   60000 : Bonus claw every 60,000 pts (SW 3-5: OFF, ON, OFF)
+ *   70000 : Bonus claw every 70,000 pts (SW 3-5: OFF, OFF, ON)
+ *   0     : No bonus claws awarded      (SW 3-5: OFF, OFF, OFF)
+ */
+export const BONUS_LIFE_INTERVAL = 70000;
 
 export const GameState = {
   ATTRACT: 'ATTRACT',
@@ -24,13 +41,50 @@ export const GameState = {
   HIGH_SCORES: 'HIGH_SCORES'
 };
 
-export const RATE_YOURSELF_TIERS = [
-  { level: 1, wellId: 0,  bonus: 0,     label: 'NOVICE' },
-  { level: 3, wellId: 2,  bonus: 6000,  label: '' },
-  { level: 5, wellId: 4,  bonus: 16000, label: '' },
-  { level: 7, wellId: 6,  bonus: 32000, label: '' },
-  { level: 9, wellId: 13, bonus: 54000, label: 'EXPERT' }
+export function getTierWellId(level) {
+  return WELL_SEQUENCE[(level - 1) % WELL_SEQUENCE.length];
+}
+
+/**
+ * Authentic Atari Tempest Skill-Step Tiers Table (from Dave Theurer's ALWELG.MAC:274)
+ */
+export const ALL_RATE_YOURSELF_TIERS = [
+  { level: 1,  bonus: 0 },
+  { level: 3,  bonus: 6000 },
+  { level: 5,  bonus: 16000 },
+  { level: 7,  bonus: 32000 },
+  { level: 9,  bonus: 54000 },
+  { level: 11, bonus: 74000 },
+  { level: 13, bonus: 94000 },
+  { level: 15, bonus: 114000 },
+  { level: 17, bonus: 134000 },
+  { level: 19, bonus: 152000 },
+  { level: 21, bonus: 170000 },
+  { level: 23, bonus: 188000 },
+  { level: 25, bonus: 208000 },
+  { level: 27, bonus: 226000 },
+  { level: 29, bonus: 248000 },
+  { level: 31, bonus: 266000 },
+  { level: 33, bonus: 300000 },
+  { level: 35, bonus: 340000 },
+  { level: 37, bonus: 382000 },
+  { level: 39, bonus: 415000 },
+  { level: 41, bonus: 439000 },
+  { level: 43, bonus: 472000 },
+  { level: 45, bonus: 531000 },
+  { level: 47, bonus: 581000 },
+  { level: 49, bonus: 624000 },
+  { level: 51, bonus: 656000 },
+  { level: 53, bonus: 766000 },
+  { level: 55, bonus: 898000 }
 ];
+
+export const RATE_YOURSELF_TIERS = ALL_RATE_YOURSELF_TIERS.slice(0, 5).map(t => ({
+  level: t.level,
+  wellId: getTierWellId(t.level),
+  bonus: t.bonus,
+  label: (t.level === 1 ? 'NOVICE' : (t.level === 9 ? 'EXPERT' : ''))
+}));
 
 export const DEFAULT_HIGH_SCORES = [
   { score: 192689, initials: 'BVD' }, // Top flyer score
@@ -59,6 +113,8 @@ export class Game {
     this.highScoreInitials = this.highScores[0].initials;
 
     this.lives = 3;
+    this.bonusLifeInterval = BONUS_LIFE_INTERVAL;
+    this.nextBonusScore = this.bonusLifeInterval;
 
     // Initial web (Level 1: Circle Tube)
     this.web = createLevelWeb(this.level);
@@ -74,10 +130,15 @@ export class Game {
     // High Score Initials Entry State
     this.initialsState = null;
 
+    this.credits = 0;
+    this.hiWave = 9; // Highest level unlocked for Rate Yourself (Atari ALWELG.MAC: HIWAVE)
+
     // Rate Yourself Startup Skill Selection State
     this.rateYourselfState = {
       selectedIndex: 0,
+      windowStart: 0,
       timer: 10.0,
+      debounceTimer: 0,
       tiers: RATE_YOURSELF_TIERS
     };
 
@@ -105,10 +166,12 @@ export class Game {
       } else if (this.state === GameState.PLAYER_DYING) {
         // Player drumming fire while respawning: buffer to fire immediately on spawn!
         this.bufferedFireOnSpawn = true;
-      } else if (this.state === GameState.ATTRACT) {
+      } else if (this.state === GameState.ATTRACT || this.state === GameState.GAME_OVER || this.state === GameState.HIGH_SCORES) {
         this.showRateYourself();
       } else if (this.state === GameState.RATE_YOURSELF) {
-        this._commitRateYourself();
+        if (this.rateYourselfState && this.rateYourselfState.debounceTimer <= 0) {
+          this._commitRateYourself();
+        }
       } else if (this.state === GameState.ENTER_INITIALS) {
         this._commitInitialLetter();
       }
@@ -168,9 +231,11 @@ export class Game {
         } else if (e.code === 'ArrowRight' || e.code === 'KeyD') {
           this._stepRateYourself(1);
         } else if (e.code === 'Enter' || e.code === 'Space' || e.code === 'Digit1') {
-          this._commitRateYourself();
+          if (this.rateYourselfState && this.rateYourselfState.debounceTimer <= 0) {
+            this._commitRateYourself();
+          }
         }
-      } else if (this.state === GameState.ATTRACT) {
+      } else if (this.state === GameState.ATTRACT || this.state === GameState.GAME_OVER || this.state === GameState.HIGH_SCORES) {
         if (e.code === 'Space' || e.code === 'Enter' || e.code === 'Digit1') {
           this.showRateYourself();
         }
@@ -210,6 +275,15 @@ export class Game {
       // Ignore
     }
     return [...DEFAULT_HIGH_SCORES];
+  }
+
+  setBonusLifeInterval(val) {
+    this.bonusLifeInterval = val;
+    if (val > 0) {
+      this.nextBonusScore = (Math.floor(this.score / val) + 1) * val;
+    } else {
+      this.nextBonusScore = 0;
+    }
   }
 
   _saveHighScores() {
@@ -284,14 +358,45 @@ export class Game {
     }
   }
 
+  updateHiWave(level) {
+    if (level > this.hiWave) {
+      this.hiWave = level;
+    }
+  }
+
+  resetHiWaveIfNoCredits() {
+    if (this.credits === 0) {
+      this.hiWave = 9;
+    }
+  }
+
   showRateYourself() {
     this.state = GameState.RATE_YOURSELF;
-    this.rateYourselfState.selectedIndex = 0;
-    this.rateYourselfState.timer = 10.0;
+
+    // Filter tiers up to highest odd level unlocked by hiWave (minimum 9)
+    const maxUnlocked = Math.max(9, (this.hiWave % 2 === 1) ? this.hiWave : (this.hiWave - 1));
+    const tiers = ALL_RATE_YOURSELF_TIERS
+      .filter(t => t.level <= maxUnlocked)
+      .map(t => ({
+        level: t.level,
+        wellId: getTierWellId(t.level),
+        bonus: t.bonus,
+        label: (t.level === 1 ? 'NOVICE' : (t.level === maxUnlocked ? 'EXPERT' : ''))
+      }));
+
+    this.rateYourselfState = {
+      tiers,
+      selectedIndex: 0,
+      windowStart: 0,
+      timer: 10.0,
+      debounceTimer: 0.75 // Debounce window matching Atari ALWELG.MAC CPY I,8
+    };
+
     if (this.input && this.input.lastMouseX && this.input.lastMouseY) {
       const tierIdx = this.getRateYourselfTierAtPos(this.input.lastMouseX, this.input.lastMouseY);
       if (tierIdx !== -1) {
         this.rateYourselfState.selectedIndex = tierIdx;
+        this._updateRateYourselfWindow();
       }
     }
     if (this.renderer && this.renderer.canvas) {
@@ -311,33 +416,49 @@ export class Game {
 
     const cx = this.renderer.viewport.centerX;
     const cy = this.renderer.viewport.centerY;
-    const tiers = this.rateYourselfState.tiers;
     const colSpacing = 68;
-    const startX = cx - ((tiers.length - 1) * colSpacing) * 0.5 + 24;
+    const numVisible = Math.min(5, this.rateYourselfState.tiers.length);
+    const startX = cx - ((numVisible - 1) * colSpacing) * 0.5 + 24;
 
     // Generous vertical bounding area: from above NOVICE/EXPERT to below BONUS
     if (canvasY < cy - 45 || canvasY > cy + 165) {
       return -1;
     }
 
-    // Horizontal bounds check across all columns
+    // Horizontal bounds check across the 5 visible columns
     const minX = startX - colSpacing * 0.5;
-    const maxX = startX + (tiers.length - 1) * colSpacing + colSpacing * 0.5;
+    const maxX = startX + (numVisible - 1) * colSpacing + colSpacing * 0.5;
     if (canvasX < minX - 10 || canvasX > maxX + 10) {
       return -1;
     }
 
-    const tierIdx = Math.round((canvasX - startX) / colSpacing);
-    return Math.max(0, Math.min(tiers.length - 1, tierIdx));
+    const visibleIdx = Math.round((canvasX - startX) / colSpacing);
+    if (visibleIdx < 0 || visibleIdx >= numVisible) return -1;
+    const ws = this.rateYourselfState.windowStart || 0;
+    const targetIdx = ws + visibleIdx;
+    return Math.max(0, Math.min(this.rateYourselfState.tiers.length - 1, targetIdx));
   }
 
   _stepRateYourself(dir) {
     const prev = this.rateYourselfState.selectedIndex;
     const maxIdx = this.rateYourselfState.tiers.length - 1;
     this.rateYourselfState.selectedIndex = Math.max(0, Math.min(maxIdx, prev + dir));
+    this._updateRateYourselfWindow();
     if (this.rateYourselfState.selectedIndex !== prev && this.audio && this.audio.playLetterCycle) {
       this.audio.playLetterCycle();
     }
+  }
+
+  _updateRateYourselfWindow() {
+    const idx = this.rateYourselfState.selectedIndex;
+    let ws = this.rateYourselfState.windowStart || 0;
+    if (idx < ws) {
+      ws = idx;
+    } else if (idx >= ws + 5) {
+      ws = idx - 4;
+    }
+    const maxWs = Math.max(0, this.rateYourselfState.tiers.length - 5);
+    this.rateYourselfState.windowStart = Math.max(0, Math.min(maxWs, ws));
   }
 
   _commitRateYourself() {
@@ -350,13 +471,17 @@ export class Game {
 
   _updateRateYourself(dt) {
     this.rateYourselfState.timer -= dt;
+    if (this.rateYourselfState.debounceTimer > 0) {
+      this.rateYourselfState.debounceTimer -= dt;
+    }
 
     const delta = this.input.consumeLaneDelta();
     if (delta !== 0) {
       this._stepRateYourself(delta > 0 ? 1 : -1);
     }
 
-    if (this.input.consumeFire() || this.rateYourselfState.timer <= 0) {
+    // Require debounceTimer <= 0 before allowing fire confirmation
+    if ((this.rateYourselfState.debounceTimer <= 0 && this.input.consumeFire()) || this.rateYourselfState.timer <= 0) {
       this._commitRateYourself();
     }
   }
@@ -367,7 +492,19 @@ export class Game {
     }
     this.score = startingBonus;
     this.lives = 3;
+    if (this.bonusLifeInterval > 0) {
+      if (startingBonus > 0) {
+        const earnedBonusLives = Math.floor(startingBonus / this.bonusLifeInterval);
+        this.lives = Math.min(6, this.lives + earnedBonusLives);
+        this.nextBonusScore = (earnedBonusLives + 1) * this.bonusLifeInterval;
+      } else {
+        this.nextBonusScore = this.bonusLifeInterval;
+      }
+    } else {
+      this.nextBonusScore = 0;
+    }
     this.level = startingLevel;
+    this.updateHiWave(startingLevel);
     this.web = createLevelWeb(this.level);
     this.player.resetForLevel(this.web);
     this.enemies.resetForLevel(this.web, this.level);
@@ -375,6 +512,7 @@ export class Game {
     this.stateTimer = 0;
     this.superzapperNoticeTimer = 2.8;
 
+    if (this.audio && this.audio.stopPulsarHum) this.audio.stopPulsarHum(true);
     this.audio.resume();
     this.audio.startPulsation();
   }
@@ -383,6 +521,19 @@ export class Game {
     this.score += pts;
     if (this.score > this.highScore) {
       this.highScore = this.score;
+    }
+
+    // Award extra claw when reaching configured score thresholds (up to 6 reserve claws max)
+    if (this.bonusLifeInterval > 0 && this.nextBonusScore > 0) {
+      while (this.score >= this.nextBonusScore) {
+        if (this.lives < 6) {
+          this.lives++;
+        }
+        if (this.audio && this.audio.playExtraLife) {
+          this.audio.playExtraLife();
+        }
+        this.nextBonusScore += this.bonusLifeInterval;
+      }
     }
   }
 
@@ -461,6 +612,7 @@ export class Game {
       this.state = GameState.PLAYER_DYING;
       this.stateTimer = 1.6;
       this.audio.stopPulsation();
+      if (this.audio.stopPulsarHum) this.audio.stopPulsarHum(true);
       return;
     }
 
@@ -486,6 +638,7 @@ export class Game {
       this.nextWeb = createLevelWeb(this.level + 1);
       this.addScore(1000);
       this.audio.stopPulsation();
+      if (this.audio.stopPulsarHum) this.audio.stopPulsarHum(true);
       this.audio.playLevelWarp();
     }
   }
@@ -546,7 +699,7 @@ export class Game {
         this.state = GameState.PLAYER_DYING;
         this.stateTimer = 1.6;
         this.audio.stopPulsation();
-        if (this.audio.stopPulsarHum) this.audio.stopPulsarHum();
+        if (this.audio.stopPulsarHum) this.audio.stopPulsarHum(true);
         return;
       }
     } else {
@@ -561,6 +714,7 @@ export class Game {
     // Transition complete: lock into next level
     if (this.stateTimer >= totalWarpDuration) {
       this.level++;
+      this.updateHiWave(this.level);
       this.web = this.nextWeb || createLevelWeb(this.level);
       this.nextWeb = null;
       this.player.resetForLevel(this.web);
@@ -592,6 +746,7 @@ export class Game {
       } else {
         this.state = GameState.GAME_OVER;
         this.stateTimer = 3.2;
+        if (this.audio && this.audio.stopPulsarHum) this.audio.stopPulsarHum(true);
       }
     }
   }
@@ -608,11 +763,14 @@ export class Game {
           currentIndex: 0,
           score: this.score
         };
+        if (this.audio && this.audio.stopPulsarHum) this.audio.stopPulsarHum(true);
         if (this.audio && this.audio.playHighScoreFanfare) {
           this.audio.playHighScoreFanfare();
         }
       } else {
         this.state = GameState.ATTRACT;
+        this.resetHiWaveIfNoCredits();
+        if (this.audio && this.audio.stopPulsarHum) this.audio.stopPulsarHum(true);
         const overlay = document.getElementById('ui-overlay');
         if (overlay) overlay.classList.remove('hidden');
       }
@@ -634,6 +792,8 @@ export class Game {
     this.stateTimer -= dt;
     if (this.stateTimer <= 0) {
       this.state = GameState.ATTRACT;
+      this.resetHiWaveIfNoCredits();
+      if (this.audio && this.audio.stopPulsarHum) this.audio.stopPulsarHum(true);
       const overlay = document.getElementById('ui-overlay');
       if (overlay) overlay.classList.remove('hidden');
     }
@@ -683,7 +843,7 @@ export class Game {
     } else {
       // 1. Render Parametric Web
       const activeLane = (this.state === GameState.PLAYING) ? this.player.lane : -1;
-      this.renderer.renderWeb(this.web, activeLane);
+      this.renderer.renderWeb(this.web, activeLane, null, this.enemies ? this.enemies.pulsars : null);
 
       // 2. Render Spikes
       this.renderer.renderSpikes(this.enemies, this.web);

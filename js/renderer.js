@@ -492,11 +492,38 @@ export class VectorRenderer {
   /**
    * Render the Parametric Web (Outer Rim, Inner Hole, and Radial Ribs)
    */
-  renderWeb(web, playerLane = -1, colorOverride = null) {
+  renderWeb(web, playerLane = -1, colorOverride = null, pulsars = null) {
     this.activeWeb = web;
     const color = colorOverride || web.strokeColor || '#0033ff';
     const vCount = web.vertexCount;
     const lCount = web.laneCount;
+
+    // Collect lanes occupied by active pulsars and ribs electrified by them
+    const pulsarLanes = new Set();
+    const electrifiedRibs = new Set();
+
+    if (pulsars && pulsars.length > 0) {
+      for (const p of pulsars) {
+        pulsarLanes.add(p.lane);
+        if (p.isFlipping) {
+          pulsarLanes.add(p.flipSourceLane);
+          pulsarLanes.add(p.flipTargetLane);
+        }
+        if (p.isElectrified) {
+          const [v0, v1] = web.getLaneIndices(p.lane);
+          electrifiedRibs.add(v0);
+          electrifiedRibs.add(v1);
+          if (p.isFlipping) {
+            const [s0, s1] = web.getLaneIndices(p.flipSourceLane);
+            const [t0, t1] = web.getLaneIndices(p.flipTargetLane);
+            electrifiedRibs.add(s0);
+            electrifiedRibs.add(s1);
+            electrifiedRibs.add(t0);
+            electrifiedRibs.add(t1);
+          }
+        }
+      }
+    }
 
     // 1. Ribs (connecting hole z=0 to rim z=1)
     for (let i = 0; i < vCount; i++) {
@@ -505,10 +532,26 @@ export class VectorRenderer {
       
       const isPlayerRib = (playerLane !== -1) && 
         (i === playerLane || i === (playerLane + 1) % vCount);
+      const isElectrified = electrifiedRibs.has(i);
 
-      const ribColor = isPlayerRib ? '#ffff00' : color;
-      const ribWidth = isPlayerRib ? 2.8 : 1.9;
+      let ribColor = isPlayerRib ? '#ffff00' : color;
+      let ribWidth = isPlayerRib ? 2.8 : 1.9;
+
+      if (isElectrified) {
+        // High voltage electric discharge jittering along the rib
+        ribColor = Math.random() < 0.5 ? '#00ffff' : '#ffffff';
+        ribWidth = 3.2;
+      }
+
       this.drawVectorLine(pInner.x, pInner.y, pOuter.x, pOuter.y, ribColor, ribWidth, true);
+
+      // Subtle electric sparks crackling along electrified ribs
+      if (isElectrified && Math.random() < 0.4) {
+        const sparkFrac = 0.2 + Math.random() * 0.7;
+        const sx = pInner.x + (pOuter.x - pInner.x) * sparkFrac + (Math.random() - 0.5) * 6;
+        const sy = pInner.y + (pOuter.y - pInner.y) * sparkFrac + (Math.random() - 0.5) * 6;
+        this.drawVectorLine(sx, sy, sx + (Math.random() - 0.5) * 10, sy + (Math.random() - 0.5) * 10, '#ffff00', 1.8, true);
+      }
     }
 
     // 2. Inner Hole Perimeter
@@ -520,7 +563,14 @@ export class VectorRenderer {
     }
 
     // 3. Outer Rim Perimeter
+    // Dave Theurer's original Atari Tempest: REDO TOP RUNGS (ALDIS2.MAC)
+    // If a lane contains an active Pulsar, its top rim rung is extinguished (turned OFF)!
     for (let i = 0; i < lCount; i++) {
+      if (pulsarLanes.has(i)) {
+        // Lane rim rung is extinguished by the active Pulsar!
+        continue;
+      }
+
       const [v0, v1] = web.getLaneIndices(i);
       const p0 = this.toScreen(web.getVertexPos(v0, 1.0), web);
       const p1 = this.toScreen(web.getVertexPos(v1, 1.0), web);
@@ -585,7 +635,7 @@ export class VectorRenderer {
 
       // 1. Render Current Tube Web
       const activeLane = player ? player.lane : -1;
-      this.renderWeb(currentWeb, activeLane);
+      this.renderWeb(currentWeb, activeLane, null, enemies ? enemies.pulsars : null);
 
       // 2. Render Green Spikes (persisting in the tube)
       if (enemies) {
@@ -1264,11 +1314,43 @@ export class VectorRenderer {
     this.activeWeb = web;
 
     for (const p of pulsars) {
-      const edges = web.getLaneEdges(p.lane, p.z);
-      if (!edges) continue;
+      let sL, sR;
 
-      const sL = this.toScreen(edges.left, web);
-      const sR = this.toScreen(edges.right, web);
+      if (p.isFlipping) {
+        const prog = p.flipProgress || 0;
+        const sEdges = web.getLaneEdges(p.flipSourceLane, 1.0);
+        const tEdges = web.getLaneEdges(p.flipTargetLane, 1.0);
+        if (!sEdges || !tEdges) continue;
+
+        const sL_src = this.toScreen(sEdges.left, web);
+        const sR_src = this.toScreen(sEdges.right, web);
+        const sL_tgt = this.toScreen(tEdges.left, web);
+        const sR_tgt = this.toScreen(tEdges.right, web);
+
+        // Interpolate along the rim
+        sL = { x: sL_src.x + (sL_tgt.x - sL_src.x) * prog, y: sL_src.y + (sL_tgt.y - sL_src.y) * prog };
+        sR = { x: sR_src.x + (sR_tgt.x - sR_src.x) * prog, y: sR_src.y + (sR_tgt.y - sR_src.y) * prog };
+
+        const dx = sR.x - sL.x;
+        const dy = sR.y - sL.y;
+        const laneW = Math.hypot(dx, dy) || 1;
+        const nx = -dy / laneW;
+        const ny = dx / laneW;
+
+        // Somersault leap outward over dividing rib
+        const arcLift = Math.sin(prog * Math.PI) * (laneW * 0.4);
+        sL.x += nx * arcLift;
+        sL.y += ny * arcLift;
+        sR.x += nx * arcLift;
+        sR.y += ny * arcLift;
+      } else {
+        const z = p.onRim ? 1.0 : p.z;
+        const edges = web.getLaneEdges(p.lane, z);
+        if (!edges) continue;
+
+        sL = this.toScreen(edges.left, web);
+        sR = this.toScreen(edges.right, web);
+      }
 
       const dx = sR.x - sL.x;
       const dy = sR.y - sL.y;
@@ -1570,13 +1652,15 @@ export class VectorRenderer {
     this.drawVectorText('1P', this.viewport.x + 18, topY, hudSize, '#ff3344', 'left');
     this.drawVectorText(String(score).padStart(6, '0'), this.viewport.x + 18, topY + hudSize * 1.35, hudSize, '#ffffff', 'left');
 
-    // Remaining Lives: Miniature yellow Blaster 'C' icons under 1P score (arcade layout)
+    // Remaining Lives: Miniature yellow Blaster 'C' icons under 1P score (arcade layout, max 6 reserve)
     const lifeSize = Math.max(10, Math.min(14, this.viewport.width * 0.024));
     const lifeBaseY = topY + hudSize * 2.85;
-    for (let l = 0; l < lives; l++) {
+    const displayedLives = Math.min(6, Math.max(0, lives));
+    for (let l = 0; l < displayedLives; l++) {
       const lx = this.viewport.x + 24 + l * (lifeSize * 1.55);
       this.drawMiniBlaster(lx, lifeBaseY, lifeSize, '#ffff00');
     }
+
 
     // High Score + Player Initials (Center Top - matching authentic QuadraScan flyer layout)
     const initials = (highScoreInitials || 'BVD').padEnd(3, ' ');
@@ -1703,19 +1787,31 @@ export class VectorRenderer {
     this.drawVectorText('HOLE',  xLabel, yHole - 6, 13, '#00ff44', 'left');
     this.drawVectorText('BONUS', xLabel, yBonus, 13, '#00ff44', 'left');
 
-    // 4. Columns (5 skill tiers)
+    // 4. Columns (5 skill tiers visible at a time)
     const tiers = state.tiers;
+    const windowStart = state.windowStart || 0;
+    const numVisible = Math.min(5, tiers.length);
+    const visibleTiers = tiers.slice(windowStart, windowStart + numVisible);
     const colSpacing = 68;
-    const startX = cx - ((tiers.length - 1) * colSpacing) * 0.5 + 24;
+    const startX = cx - ((numVisible - 1) * colSpacing) * 0.5 + 24;
 
-    for (let i = 0; i < tiers.length; i++) {
-      const tier = tiers[i];
-      const colX = startX + i * colSpacing;
+    // Scroll indicators if more than 5 tiers exist
+    if (windowStart > 0) {
+      this.drawVectorText('<', startX - colSpacing * 0.55, yLevel, 14, '#00ffff', 'center');
+    }
+    if (windowStart + numVisible < tiers.length) {
+      this.drawVectorText('>', startX + (numVisible - 0.45) * colSpacing, yLevel, 14, '#00ffff', 'center');
+    }
+
+    for (let j = 0; j < visibleTiers.length; j++) {
+      const tier = visibleTiers[j];
+      const actualIdx = windowStart + j;
+      const colX = startX + j * colSpacing;
 
       // Red Novice / Expert tag above columns
-      if (i === 0) {
+      if (actualIdx === 0) {
         this.drawVectorText('NOVICE', colX, yNovice, 11, '#ff2222', 'center');
-      } else if (i === tiers.length - 1) {
+      } else if (actualIdx === tiers.length - 1) {
         this.drawVectorText('EXPERT', colX, yNovice, 11, '#ff2222', 'center');
       }
 
@@ -1729,11 +1825,11 @@ export class VectorRenderer {
         const coords = preview.coords;
         const count = coords.length;
         this.ctx.save();
-        for (let j = 0; j < count - 1; j++) {
-          const x0 = colX + coords[j][0] * previewScale;
-          const y0 = yHole + coords[j][1] * previewScale;
-          const x1 = colX + coords[j + 1][0] * previewScale;
-          const y1 = yHole + coords[j + 1][1] * previewScale;
+        for (let k = 0; k < count - 1; k++) {
+          const x0 = colX + coords[k][0] * previewScale;
+          const y0 = yHole + coords[k][1] * previewScale;
+          const x1 = colX + coords[k + 1][0] * previewScale;
+          const y1 = yHole + coords[k + 1][1] * previewScale;
           this.drawVectorLine(x0, y0, x1, y1, '#0044ff', 1.8, true);
         }
         if (preview.isClosed) {
@@ -1750,7 +1846,7 @@ export class VectorRenderer {
       this.drawVectorText(String(tier.bonus), colX, yBonus, 11, '#ff2222', 'center');
 
       // Selection Cursor Box around currently chosen column
-      if (i === state.selectedIndex) {
+      if (actualIdx === state.selectedIndex) {
         const boxLeft = colX - 28;
         const boxRight = colX + 28;
         const boxTop = yLevel - 15;

@@ -31,6 +31,7 @@ export class AudioManager {
     this.pulsarSubOsc = null;
     this.pulsarGain = null;
     this.pulsarFilter = null;
+    this.pulsarStopTimer = null;
     this.isPulsarHumming = false;
   }
 
@@ -83,6 +84,7 @@ export class AudioManager {
       clearTimeout(this.pulsationTimer);
       this.pulsationTimer = null;
     }
+    this.stopPulsarHum(true);
   }
 
   updatePulsationRate(highestEnemyZ) {
@@ -583,6 +585,12 @@ export class AudioManager {
       return;
     }
 
+    // Cancel any pending stop/fade timeout since pulsars are actively humming
+    if (this.pulsarStopTimer) {
+      clearTimeout(this.pulsarStopTimer);
+      this.pulsarStopTimer = null;
+    }
+
     // Find highest pulse expansion among all active pulsars (0.0 to 1.0)
     let maxPulse = 0;
     for (const p of pulsars) {
@@ -634,34 +642,59 @@ export class AudioManager {
     this.pulsarGain.gain.setTargetAtTime(targetGain, now, 0.04);
   }
 
-  stopPulsarHum() {
-    if (!this.isPulsarHumming) return;
+  stopPulsarHum(immediate = false) {
+    if (this.pulsarStopTimer) {
+      clearTimeout(this.pulsarStopTimer);
+      this.pulsarStopTimer = null;
+    }
+
+    if (!this.isPulsarHumming && !this.pulsarOsc && !this.pulsarSubOsc && !this.pulsarGain) {
+      return;
+    }
+
+    this.isPulsarHumming = false;
+
+    const cleanup = () => {
+      if (this.pulsarStopTimer) {
+        clearTimeout(this.pulsarStopTimer);
+        this.pulsarStopTimer = null;
+      }
+      if (this.pulsarOsc) {
+        try { this.pulsarOsc.stop(); } catch (e) {}
+        try { this.pulsarOsc.disconnect(); } catch (e) {}
+        this.pulsarOsc = null;
+      }
+      if (this.pulsarSubOsc) {
+        try { this.pulsarSubOsc.stop(); } catch (e) {}
+        try { this.pulsarSubOsc.disconnect(); } catch (e) {}
+        this.pulsarSubOsc = null;
+      }
+      if (this.pulsarGain) {
+        try { this.pulsarGain.disconnect(); } catch (e) {}
+        this.pulsarGain = null;
+      }
+      if (this.pulsarFilter) {
+        try { this.pulsarFilter.disconnect(); } catch (e) {}
+        this.pulsarFilter = null;
+      }
+      this.isPulsarHumming = false;
+    };
+
+    if (immediate || !this.ctx || this.ctx.state !== 'running') {
+      cleanup();
+      return;
+    }
+
     if (this.pulsarGain && this.ctx) {
       try {
         const now = this.ctx.currentTime;
-        this.pulsarGain.gain.setTargetAtTime(0.001, now, 0.05);
-        setTimeout(() => {
-          if (this.pulsarOsc) {
-            try { this.pulsarOsc.stop(); } catch (e) {}
-            this.pulsarOsc.disconnect();
-            this.pulsarOsc = null;
-          }
-          if (this.pulsarSubOsc) {
-            try { this.pulsarSubOsc.stop(); } catch (e) {}
-            this.pulsarSubOsc.disconnect();
-            this.pulsarSubOsc = null;
-          }
-          if (this.pulsarGain) {
-            this.pulsarGain.disconnect();
-            this.pulsarGain = null;
-          }
-          this.isPulsarHumming = false;
-        }, 80);
+        this.pulsarGain.gain.setTargetAtTime(0.0001, now, 0.04);
+        this.pulsarStopTimer = setTimeout(cleanup, 60);
       } catch (e) {
-        this.isPulsarHumming = false;
+        cleanup();
       }
     } else {
-      this.isPulsarHumming = false;
+      cleanup();
     }
   }
 
@@ -755,5 +788,28 @@ export class AudioManager {
       osc.stop(t + 0.22);
     });
   }
+
+  /**
+   * Extra Claw / Bonus Life Fanfare (POKEY rapid ascending 4-tone arpeggio)
+   */
+  playExtraLife() {
+    if (!this.ctx || this.ctx.state !== 'running') return;
+    const now = this.ctx.currentTime;
+    const notes = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6
+    notes.forEach((freq, idx) => {
+      const t = now + idx * 0.065;
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(freq, t);
+      gain.gain.setValueAtTime(0.26, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+      osc.connect(gain);
+      gain.connect(this.masterGain);
+      osc.start(t);
+      osc.stop(t + 0.18);
+    });
+  }
 }
+
 

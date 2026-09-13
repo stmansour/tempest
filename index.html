@@ -49,6 +49,11 @@
           </button>
         </div>
 
+        <div class="bonus-claw-notice">
+          <span class="bonus-claw-star">&#9733;</span>
+          <span class="bonus-claw-text">BONUS CLAW EVERY <span id="sidebar-bonus-pts">20,000</span> PTS</span>
+        </div>
+
         <button id="guide-toggle-btn" class="arcade-guide-btn" tabindex="-1" title="View Arcade Guide, Scoring & Controls [TAB]">
           <span class="guide-btn-icon">⚡</span>
           <span class="guide-btn-text">ARCADE MANUAL &amp; STATS</span>
@@ -103,6 +108,20 @@
           </div>
         </section>
 
+        <!-- Mission Intel & Bonus Claw Rules -->
+        <section class="drawer-card intel-card">
+          <h3 class="card-title">MISSION RULES &amp; BONUS CLAWS</h3>
+          <div class="intel-content">
+            <div class="intel-highlight-row">
+              <span class="intel-claw-badge">&#9889;</span>
+              <div class="intel-text-group">
+                <span class="intel-headline">BONUS CLAW EVERY <span id="drawer-bonus-pts">70,000</span> PTS</span>
+                <p class="intel-subtext">Earn an extra Claw Blaster for every <span id="drawer-bonus-subtext-pts">70,000</span> points scored. Up to 6 reserve claws can be banked at a time.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <!-- Authentic Arcade Bezel Scoring & Enemy Lore Table -->
         <section class="drawer-card bezel-scoring-card">
           <h3 class="card-title">ENEMY IDENTIFICATION &amp; SCORING</h3>
@@ -111,8 +130,19 @@
             <div class="scoring-row">
               <div class="enemy-icon-col">
                 <svg class="vector-icon" viewBox="0 0 40 40">
-                  <path d="M5,20 L15,10 L25,30 L35,20 M20,5 L20,35" stroke="#00e5ff" stroke-width="2.5" fill="none"
-                    stroke-linecap="round" />
+                  <!-- Authentic Atari QuadraScan FUSE0 Vector Geometry (ALVROM.MAC) -->
+                  <!-- Red Leg -->
+                  <path d="M23.9,19.4 L21.3,15.4 L24.6,11.5 L20.6,10.2 L24.6,7.7 L23.2,3.8" stroke="#ff0055" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+                  <!-- Yellow Leg -->
+                  <path d="M29.1,4.4 L30.4,6.3 L31.7,8.9 L27.8,11.5 L29.1,14.1 L23.9,19.4" stroke="#ffff00" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+                  <!-- Green Leg -->
+                  <path d="M23.9,19.4 L30.4,18.1 L29.1,23.2 L33.0,23.2 L29.1,27.1 L31.7,31.7 L34.3,31.7" stroke="#00ff44" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+                  <!-- Purple Leg -->
+                  <path d="M21.3,36.2 L21.3,32.4 L17.4,32.4 L19.4,27.8 L18.1,23.2 L21.9,24.6 L23.9,19.4" stroke="#cc00ff" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+                  <!-- Turquoise Leg -->
+                  <path d="M23.9,19.4 L18.7,20.6 L17.4,17.4 L14.8,20.0 L13.5,16.8 L5.7,21.9" stroke="#00e5ff" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+                  <!-- Center Core Spark -->
+                  <circle cx="23.9" cy="19.4" r="1.6" fill="#ffffff" />
                 </svg>
               </div>
               <div class="enemy-info-col">
@@ -120,7 +150,7 @@
                   <span class="enemy-name" style="color: #00e5ff;">FUSEBALL</span>
                   <span class="enemy-pts">250 &bull; 500 &bull; 750 PTS</span>
                 </div>
-                <p class="enemy-desc">Zips unpredictably up and down lane boundaries. Very fast!</p>
+                <p class="enemy-desc">Crackling electrical star. Crawls unpredictably along lane divider ribs.</p>
               </div>
             </div>
 
@@ -136,7 +166,7 @@
                   <span class="enemy-name" style="color: #ffff00;">PULSARS</span>
                   <span class="enemy-pts">200 PTS</span>
                 </div>
-                <p class="enemy-desc">Electrifies and pulsates entire adjacent lanes. EXTREMELY DEADLY!</p>
+                <p class="enemy-desc">Electrifies lanes and extinguishes rim rungs. Flips along rim when dormant to hunt your claw. Shoot only when dormant!</p>
               </div>
             </div>
 

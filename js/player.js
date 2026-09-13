@@ -161,6 +161,9 @@ export class Player {
       enemies.createClawExplosion(this.lane, this.z, web);
     }
     if (audio) {
+      if (audio.stopPulsarHum) {
+        audio.stopPulsarHum(true);
+      }
       if (audio.playClawExplosion) {
         audio.playClawExplosion();
       } else {

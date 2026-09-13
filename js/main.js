@@ -37,6 +37,17 @@ window.addEventListener('DOMContentLoaded', () => {
   const game = new Game(renderer, audio, input);
   window.game = game;
 
+  // Display active Bonus Claw score milestone in UI
+  const bonusPtsStr = (game.bonusLifeInterval > 0)
+    ? game.bonusLifeInterval.toLocaleString()
+    : 'NO';
+  const sidebarBonusEl = document.getElementById('sidebar-bonus-pts');
+  const drawerBonusEl = document.getElementById('drawer-bonus-pts');
+  const drawerBonusSubEl = document.getElementById('drawer-bonus-subtext-pts');
+  if (sidebarBonusEl) sidebarBonusEl.textContent = bonusPtsStr;
+  if (drawerBonusEl) drawerBonusEl.textContent = bonusPtsStr;
+  if (drawerBonusSubEl) drawerBonusSubEl.textContent = bonusPtsStr;
+
   // URL parameter parsing:
   // ?level=N (jump to level), ?debug=1 or ?vp=1 (vanishing point overlay), ?god=1 (invulnerability), ?warp=1 (trigger warp immediately)
   const urlParams = new URLSearchParams(window.location.search);
@@ -89,6 +100,7 @@ window.addEventListener('DOMContentLoaded', () => {
       canvas.focus();
       audio.playCoinDrop();
       credits++;
+      game.credits = credits;
       if (creditsVal) {
         creditsVal.textContent = String(credits).padStart(2, '0');
       }
@@ -101,18 +113,19 @@ window.addEventListener('DOMContentLoaded', () => {
       unlockAudio();
       startButton.blur();
       canvas.focus();
-      if (game.state === GameState.ATTRACT) {
+      if (game.state === GameState.ATTRACT || game.state === GameState.GAME_OVER || game.state === GameState.HIGH_SCORES) {
         if (credits > 0) {
           credits--;
+          game.credits = credits;
           if (creditsVal) {
             creditsVal.textContent = String(credits).padStart(2, '0');
           }
         }
         game.showRateYourself();
       } else if (game.state === GameState.RATE_YOURSELF) {
-        game._commitRateYourself();
-      } else {
-        game.startNewGame();
+        if (game.rateYourselfState && game.rateYourselfState.debounceTimer <= 0) {
+          game._commitRateYourself();
+        }
       }
     });
   }
@@ -205,13 +218,15 @@ window.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+
   // Clicking canvas directly starts game or selects in Rate Yourself
   canvas.addEventListener('click', (e) => {
     unlockAudio();
     canvas.focus();
-    if (game.state === GameState.ATTRACT) {
+    if (game.state === GameState.ATTRACT || game.state === GameState.GAME_OVER || game.state === GameState.HIGH_SCORES) {
       if (credits > 0) {
         credits--;
+        game.credits = credits;
         if (creditsVal) {
           creditsVal.textContent = String(credits).padStart(2, '0');
         }
@@ -221,8 +236,11 @@ window.addEventListener('DOMContentLoaded', () => {
       const tierIdx = game.getRateYourselfTierAtPos(e.clientX, e.clientY);
       if (tierIdx !== -1) {
         game.rateYourselfState.selectedIndex = tierIdx;
+        game._updateRateYourselfWindow();
       }
-      game._commitRateYourself();
+      if (game.rateYourselfState && game.rateYourselfState.debounceTimer <= 0) {
+        game._commitRateYourself();
+      }
     }
   });
 
@@ -283,18 +301,20 @@ window.addEventListener('DOMContentLoaded', () => {
       }
     }
 
-    if (game.state === GameState.ATTRACT) {
+    if (game.state === GameState.ATTRACT || game.state === GameState.GAME_OVER || game.state === GameState.HIGH_SCORES) {
       if (['Space', 'Enter', 'Digit1', 'KeyC', 'ArrowLeft', 'ArrowRight', 'KeyA', 'KeyD'].includes(e.code)) {
         e.preventDefault();
         unlockAudio();
         if (e.code === 'KeyC') {
           audio.playCoinDrop();
           credits++;
+          game.credits = credits;
           if (creditsVal) creditsVal.textContent = String(credits).padStart(2, '0');
           return;
         }
         if (credits > 0) {
           credits--;
+          game.credits = credits;
           if (creditsVal) creditsVal.textContent = String(credits).padStart(2, '0');
         }
         game.showRateYourself();

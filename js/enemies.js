@@ -237,9 +237,15 @@ export class EnemyManager {
       t.lane = web.clampLane((safeLane + oppositeLane + spread) % web.laneCount);
     }
 
-    for (const p of this.pulsars) {
+    for (let i = 0; i < this.pulsars.length; i++) {
+      const p = this.pulsars[i];
+      p.onRim = false;
+      p.isFlipping = false;
+      p.flipProgress = 0;
       p.z = 0.05 + Math.random() * 0.08;
       p.pulseHeight = 0;
+      const spread = (i % 2 === 0 ? 1 : -1) * Math.floor((i + 1) / 2);
+      p.lane = web.clampLane((safeLane + oppositeLane + spread) % web.laneCount);
     }
 
     for (const f of this.fuseballs) {
@@ -310,16 +316,24 @@ export class EnemyManager {
       }
     }
 
-    // 4. Pulsars near rim
+    // 4. Pulsars near rim or on rim
     for (let i = this.pulsars.length - 1; i >= 0; i--) {
       const p = this.pulsars[i];
-      if (p.lane === playerLane && p.z >= 0.70) {
-        const pt = this.web.getLaneCenter(p.lane, p.z);
-        this.createExplosion(pt, '#00ffff', 24);
-        this.pulsars.splice(i, 1);
-        if (audio) audio.playExplosion(false);
-        if (onScore) onScore(200);
-        return true;
+      const inLane = (p.lane === playerLane) ||
+        (p.isFlipping && (p.flipTargetLane === playerLane || p.flipSourceLane === playerLane));
+      if (inLane && (p.onRim || p.z >= 0.70)) {
+        if (!p.isElectrified) {
+          const explodeLane = (p.isFlipping && p.flipTargetLane === playerLane) ? p.flipTargetLane : p.lane;
+          const pt = this.web.getLaneCenter(explodeLane, p.z);
+          this.createExplosion(pt, '#00ffff', 24, explodeLane, p.z);
+          this.pulsars.splice(i, 1);
+          if (audio) audio.playExplosion(false);
+          if (onScore) onScore(200);
+          return true;
+        } else {
+          // Electrified pulsar absorbs blaster shots
+          return true;
+        }
       }
     }
 
@@ -391,6 +405,12 @@ export class EnemyManager {
         pulseTimer: Math.random() * 1.2,
         pulseHeight: 0.0,
         isElectrified: false,
+        onRim: false,
+        isFlipping: false,
+        flipProgress: 0,
+        flipSourceLane: lane,
+        flipTargetLane: lane,
+        rimMoveTimer: 0,
         color: '#ffff00'
       });
       return;
@@ -522,7 +542,6 @@ export class EnemyManager {
     // 3b. Update Pulsars
     for (let i = this.pulsars.length - 1; i >= 0; i--) {
       const pulsar = this.pulsars[i];
-      pulsar.z += pulsar.speed * dt;
       pulsar.pulseTimer += dt;
 
       // Oscillate pulse height between 0.0 (flat dormant) and 1.0 (tall electrified)
@@ -530,18 +549,102 @@ export class EnemyManager {
       pulsar.pulseHeight = Math.max(0, Math.sin(cycle * Math.PI * 2));
       pulsar.isElectrified = (pulsar.pulseHeight > 0.42);
 
-      if (pulsar.z > maxZ) maxZ = pulsar.z;
+      if (!pulsar.onRim) {
+        pulsar.z += pulsar.speed * dt;
+        if (pulsar.z > maxZ) maxZ = pulsar.z;
 
-      // If electrified pulsar touches player's claw near rim (z >= 0.85)
-      if (player && player.isAlive && player.lane === pulsar.lane && pulsar.z >= 0.85 && pulsar.isElectrified) {
-        if (player.spawnGraceTimer <= 0) {
-          player.kill(audio, this, this.web);
-          return;
+        if (pulsar.z >= 1.0) {
+          pulsar.z = 1.0;
+          pulsar.onRim = true;
+          pulsar.isFlipping = false;
+          pulsar.flipProgress = 0;
+          pulsar.rimMoveTimer = 0.4 + Math.random() * 0.4;
+        }
+      } else {
+        if (maxZ < 1.0) maxZ = 1.0;
+
+        // Dave Theurer's authentic Atari Tempest: PULSCP (Pulsar Chaser Player)
+        // Pulsars at the rim flip between lanes toward the player claw when dormant!
+        if (pulsar.isFlipping) {
+          const rimSpeed = 2.2;
+          pulsar.flipProgress += dt * rimSpeed;
+          if (pulsar.flipProgress >= 1.0) {
+            pulsar.isFlipping = false;
+            pulsar.lane = pulsar.flipTargetLane;
+            pulsar.flipProgress = 0;
+            pulsar.rimMoveTimer = 0.35 + Math.random() * 0.45;
+
+            // Landing check on player claw
+            if (player && player.isAlive && pulsar.lane === player.lane) {
+              if (player.spawnGraceTimer > 0) {
+                const pt = this.web.getLaneCenter(pulsar.lane, 1.0);
+                this.createExplosion(pt, '#00ffff', 32, pulsar.lane, 1.0);
+                this.pulsars.splice(i, 1);
+                if (audio) audio.playExplosion(false);
+                if (onScore) onScore(200);
+                continue;
+              } else {
+                player.kill(audio, this, this.web);
+                return;
+              }
+            }
+          }
+        } else {
+          pulsar.rimMoveTimer -= dt;
+          // Only initiate flip when dormant (not electrified) - authentic VCHKPU check
+          if (pulsar.rimMoveTimer <= 0 && !pulsar.isElectrified && player && player.isAlive) {
+            let dir = 1;
+            if (this.web.isClosed) {
+              let diff = player.lane - pulsar.lane;
+              if (diff > this.web.laneCount / 2) diff -= this.web.laneCount;
+              if (diff < -this.web.laneCount / 2) diff += this.web.laneCount;
+              dir = diff >= 0 ? 1 : -1;
+            } else {
+              dir = player.lane >= pulsar.lane ? 1 : -1;
+            }
+            if (Math.random() < 0.15) dir *= -1;
+
+            const nextLane = this.web.clampLane(pulsar.lane + dir);
+            if (nextLane !== pulsar.lane) {
+              pulsar.isFlipping = true;
+              pulsar.flipProgress = 0;
+              pulsar.flipSourceLane = pulsar.lane;
+              pulsar.flipTargetLane = nextLane;
+              if (audio) audio.playFlipperFlip();
+            } else {
+              pulsar.rimMoveTimer = 0.35;
+            }
+          }
         }
       }
 
-      if (pulsar.z >= 1.0) {
-        this.pulsars.splice(i, 1);
+      // Authentic Arcade Lane Electrocution:
+      // When a Pulsar pulses/electrifies, the entire alley is charged with electricity.
+      // If the player's blaster is in that lane when it pulses, it is destroyed!
+      if (player && player.isAlive && pulsar.isElectrified) {
+        const inHazardLane = (pulsar.lane === player.lane) ||
+          (pulsar.isFlipping && (pulsar.flipSourceLane === player.lane || pulsar.flipTargetLane === player.lane));
+        if (inHazardLane) {
+          if (player.spawnGraceTimer <= 0) {
+            player.kill(audio, this, this.web);
+            return;
+          }
+        }
+      }
+
+      // If pulsar is sitting or landed on the rim in player's lane (even when dormant):
+      if (player && player.isAlive && pulsar.onRim && pulsar.lane === player.lane) {
+        if (player.spawnGraceTimer > 0) {
+          const pt = this.web.getLaneCenter(pulsar.lane, 1.0);
+          this.createExplosion(pt, '#00ffff', 32, pulsar.lane, 1.0);
+          this.pulsars.splice(i, 1);
+          if (audio) audio.playExplosion(false);
+          if (onScore) onScore(200);
+          continue;
+        } else {
+          player.kill(audio, this, this.web);
+          return;
+        }
       }
     }
 
@@ -811,15 +914,30 @@ export class EnemyManager {
       // Check Pulsars
       for (let i = this.pulsars.length - 1; i >= 0; i--) {
         const p = this.pulsars[i];
-        if (p.lane === shot.lane && Math.abs(p.z - shot.z) < 0.12) {
-          const pt = this.web.getLaneCenter(p.lane, p.z);
-          this.createExplosion(pt, '#00ffff', 1, p.lane, p.z);
-          this.pulsars.splice(i, 1);
-          shot.active = false;
-          shotHit = true;
-          if (audio) audio.playExplosion(false);
-          if (onScore) onScore(200);
-          break;
+        const inLane = (shot.lane === p.lane) ||
+          (p.isFlipping && (shot.lane === p.flipTargetLane || shot.lane === p.flipSourceLane));
+        if (inLane) {
+          const zHit = (p.onRim && shot.z >= 0.80) ||
+            (Math.abs(p.z - shot.z) < 0.14) ||
+            (shot.prevZ !== undefined && shot.prevZ >= p.z && shot.z <= p.z);
+          if (zHit) {
+            if (!p.isElectrified) {
+              const explodeLane = (p.isFlipping && shot.lane === p.flipTargetLane) ? p.flipTargetLane : p.lane;
+              const pt = this.web.getLaneCenter(explodeLane, p.z);
+              this.createExplosion(pt, '#00ffff', 1, explodeLane, p.z);
+              this.pulsars.splice(i, 1);
+              shot.active = false;
+              shotHit = true;
+              if (audio) audio.playExplosion(false);
+              if (onScore) onScore(200);
+              break;
+            } else {
+              // Electrified pulsar absorbs blaster shots!
+              shot.active = false;
+              shotHit = true;
+              break;
+            }
+          }
         }
       }
       if (shotHit) continue;
