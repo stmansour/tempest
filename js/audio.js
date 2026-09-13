@@ -623,13 +623,14 @@ export class AudioManager {
     }
 
     // Modulate pitch and volume based on pulse height
-    // Base frequency 75Hz -> 160Hz, Sub 37.5Hz -> 80Hz
-    const targetFreq = 75 + maxPulse * 85;
-    const targetGain = 0.04 + maxPulse * 0.22;
+    // Lowered pitch: Base frequency 52Hz -> 110Hz, Sub 26Hz -> 55Hz
+    // Reduced volume: 0.02 -> 0.12 (soft, deep electrical hum)
+    const targetFreq = 52 + maxPulse * 58;
+    const targetGain = 0.02 + maxPulse * 0.10;
 
     this.pulsarOsc.frequency.setTargetAtTime(targetFreq, now, 0.04);
     this.pulsarSubOsc.frequency.setTargetAtTime(targetFreq * 0.5, now, 0.04);
-    this.pulsarFilter.frequency.setTargetAtTime(180 + maxPulse * 280, now, 0.04);
+    this.pulsarFilter.frequency.setTargetAtTime(140 + maxPulse * 180, now, 0.04);
     this.pulsarGain.gain.setTargetAtTime(targetGain, now, 0.04);
   }
 

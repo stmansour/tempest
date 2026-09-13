@@ -798,7 +798,7 @@ export class VectorRenderer {
     const name = web ? web.name : 'Unknown';
     const id = web ? web.id : 0;
     const closed = (web && web.isClosed) ? 'Closed' : 'Open';
-    this.drawVectorText(`VP DIAGNOSTICS: LVL ${levelNum || 1} - ${name} (${closed})`, boxX + 10, boxY + 14, 10, '#00ffff', 'left');
+    this.drawVectorText(`VP DIAGNOSTICS: LVL ${levelNum || 1} - ${name} #${id} (${closed})`, boxX + 10, boxY + 14, 10, '#00ffff', 'left');
     this.drawVectorText(`NUDGE VP: [I] UP  [K] DOWN  [J] LEFT  [L] RIGHT`, boxX + 10, boxY + 34, 9, '#ffff00', 'left');
     this.drawVectorText(`RESET: [R]  |  PRINT CONFIG: [P]  |  TOGGLE: [V]`, boxX + 10, boxY + 54, 9, '#00ffaa', 'left');
     if (web && web.visualCenter) {

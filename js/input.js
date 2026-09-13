@@ -40,6 +40,8 @@ export class InputManager {
     this.lastKeyboardTime = 0;
     this.lastMouseX = 0;
     this.lastMouseY = 0;
+    this.lastAimX = 0;
+    this.lastAimY = 0;
 
     // Keyboard state
     this.keys = {
@@ -90,12 +92,19 @@ export class InputManager {
       }
     });
 
-    document.addEventListener('pointerlockerror', (err) => {
+    document.addEventListener('pointerlockerror', (_err) => {
       // Quiet fallback if pointer lock is cancelled or unrequested
     });
 
     // Mouse movement: supports both Pointer Lock rotary spinner and Direct Aiming
     window.addEventListener('mousemove', (e) => {
+      this.lastMouseX = e.clientX;
+      this.lastMouseY = e.clientY;
+
+      if (this.onMouseMove) {
+        this.onMouseMove(e.clientX, e.clientY);
+      }
+
       if (this.isLocked) {
         // Rotary Spinner Mode
         let deltaX = e.movementX || 0;
@@ -118,11 +127,11 @@ export class InputManager {
         }
 
         // 2. Ignore trackpad tremor (requires at least 8px deliberate movement)
-        const dist = Math.hypot(e.clientX - this.lastMouseX, e.clientY - this.lastMouseY);
+        const dist = Math.hypot(e.clientX - this.lastAimX, e.clientY - this.lastAimY);
         if (dist < 8) return;
 
-        this.lastMouseX = e.clientX;
-        this.lastMouseY = e.clientY;
+        this.lastAimX = e.clientX;
+        this.lastAimY = e.clientY;
         this.mouseAimPos = { x: e.clientX, y: e.clientY };
 
         if (this.onImmediateAim) {
@@ -153,6 +162,11 @@ export class InputManager {
     // Mouse buttons
     window.addEventListener('mousedown', (e) => {
       if (e.target !== this.canvas && !this.isLocked) return;
+
+      if (this.onMouseDown) {
+        const handled = this.onMouseDown(e);
+        if (handled) return;
+      }
 
       if (e.button === 0) {
         this.keys.fire = true;
@@ -271,7 +285,7 @@ export class InputManager {
     }
   }
 
-  update(dt) {
+  update(_dt) {
     if (!this.allowRepeat) return;
 
     const now = performance.now();

@@ -1,1 +1,4 @@
 not-in-github
+candidates/
+dist/
+node_modules/

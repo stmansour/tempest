@@ -286,9 +286,25 @@ When the Claw collides with a Spike during level transitions or dies in combat, 
 * Over the 2.1-second hold phase, the vector stroke width multiplier ramps smoothly:
   $$\text{strokeMultiplier} = 1.0 + \text{holdProgress} \times 1.0 \quad (1.0 \to 2.0)$$
 
-### C. Color-Shifting Neon Underglow
-* Beneath the white foreground letters, two dynamic neon underglow passes are drawn:
-  1. **Pass 0 (Broad Ambient Bloom)**: Soft ambient aura with stroke width 4.5x, using secondary color $\text{HSL}((\text{hue} + 45)^\circ, 100\%, 65\%)$.
-  2. **Pass 1 (Saturated Neon Core Aura)**: Vivid aura with stroke width 2.8x, using primary shifting color $\text{HSL}(\text{hue}^\circ, 100\%, 55\%)$, where $\text{hue}$ rotates smoothly with time.
-  3. **Pass 2 (Crisp Foreground Vector Letters)**: Thickening pure white letters with phosphor bloom glow.
+### C. High-Contrast White Lettering
+* Over the 2.1-second hold phase, the vector stroke width multiplier ramps smoothly from 1.0x to 2.0x, providing thick, crisp white vector letters on the dark vector screen.
+
+---
+
+## 11. Project Architecture & Release Build System
+
+### A. Modular Directory Organization
+* **`css/`**: Houses `style.css` and a local `Makefile` that concatenates CSS into `candidates/tempest.css`.
+* **`js/`**: Houses all modular source JavaScript components (`vector_font.js`, `web.js`, `audio.js`, `input.js`, `player.js`, `enemies.js`, `renderer.js`, `game.js`, `main.js`) and a local `Makefile` that concatenates them in topological dependency order into `candidates/tempest.js`.
+* **`images/`**: Houses all cabinet art and SVG assets with an asset-packaging `Makefile`.
+* **`dist/`**: The standalone production distribution containing a single bundled `js/tempest.js`, a single `css/tempest.css`, `images/`, and a version-stamped `index.html`.
+
+### B. Recursive Makefile Targets
+* **`make` / `make package`**: Recursively compiles sub-makefiles, validates syntax and duplicate functions via ESLint, and constructs the production `dist/` directory.
+* **`make build`**: Aggregates code into `candidates/` and verifies syntax.
+* **`make clean`**: Removes `dist/`, `candidates/`, and any temporary build files.
+* **`make validate`**: Runs ESLint across all source and candidate files.
+* **`make serve`**: Launches local HTTP server serving directly from `dist/` on port `8088`.
+* **`make relsman`**: Deploys the package to `sman@stevemansour.com:~/public_html/games/tempest/` using atomic `.new` directory swap over SSH port 1291.
+
 

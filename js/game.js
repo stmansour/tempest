@@ -125,6 +125,41 @@ export class Game {
       }
     };
 
+    this.input.onMouseMove = (screenX, screenY) => {
+      if (this.state === GameState.RATE_YOURSELF) {
+        const tierIdx = this.getRateYourselfTierAtPos(screenX, screenY);
+        if (tierIdx !== -1) {
+          if (this.rateYourselfState.selectedIndex !== tierIdx) {
+            this.rateYourselfState.selectedIndex = tierIdx;
+            if (this.audio && this.audio.playLetterCycle) {
+              this.audio.playLetterCycle();
+            }
+          }
+          if (this.renderer && this.renderer.canvas) {
+            this.renderer.canvas.style.cursor = 'pointer';
+          }
+        } else {
+          if (this.renderer && this.renderer.canvas) {
+            this.renderer.canvas.style.cursor = 'default';
+          }
+        }
+      }
+    };
+
+    this.input.onMouseDown = (e) => {
+      if (this.state === GameState.RATE_YOURSELF) {
+        if (e.button === 0) {
+          const tierIdx = this.getRateYourselfTierAtPos(e.clientX, e.clientY);
+          if (tierIdx !== -1) {
+            this.rateYourselfState.selectedIndex = tierIdx;
+          }
+          this._commitRateYourself();
+          return true;
+        }
+      }
+      return false;
+    };
+
     // Keyboard input hook for typing initials directly or navigating Rate Yourself
     this.input.onKeyDown = (e) => {
       if (this.state === GameState.RATE_YOURSELF) {
@@ -253,7 +288,47 @@ export class Game {
     this.state = GameState.RATE_YOURSELF;
     this.rateYourselfState.selectedIndex = 0;
     this.rateYourselfState.timer = 10.0;
+    if (this.input && this.input.lastMouseX && this.input.lastMouseY) {
+      const tierIdx = this.getRateYourselfTierAtPos(this.input.lastMouseX, this.input.lastMouseY);
+      if (tierIdx !== -1) {
+        this.rateYourselfState.selectedIndex = tierIdx;
+      }
+    }
+    if (this.renderer && this.renderer.canvas) {
+      this.renderer.canvas.style.cursor = 'default';
+    }
     if (this.audio) this.audio.resume();
+  }
+
+  getRateYourselfTierAtPos(screenX, screenY) {
+    if (this.state !== GameState.RATE_YOURSELF || !this.renderer) return -1;
+    const canvas = this.renderer.canvas;
+    if (!canvas) return -1;
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return -1;
+    const canvasX = (screenX - rect.left) * (canvas.width / rect.width);
+    const canvasY = (screenY - rect.top) * (canvas.height / rect.height);
+
+    const cx = this.renderer.viewport.centerX;
+    const cy = this.renderer.viewport.centerY;
+    const tiers = this.rateYourselfState.tiers;
+    const colSpacing = 68;
+    const startX = cx - ((tiers.length - 1) * colSpacing) * 0.5 + 24;
+
+    // Generous vertical bounding area: from above NOVICE/EXPERT to below BONUS
+    if (canvasY < cy - 45 || canvasY > cy + 165) {
+      return -1;
+    }
+
+    // Horizontal bounds check across all columns
+    const minX = startX - colSpacing * 0.5;
+    const maxX = startX + (tiers.length - 1) * colSpacing + colSpacing * 0.5;
+    if (canvasX < minX - 10 || canvasX > maxX + 10) {
+      return -1;
+    }
+
+    const tierIdx = Math.round((canvasX - startX) / colSpacing);
+    return Math.max(0, Math.min(tiers.length - 1, tierIdx));
   }
 
   _stepRateYourself(dir) {
@@ -266,6 +341,9 @@ export class Game {
   }
 
   _commitRateYourself() {
+    if (this.renderer && this.renderer.canvas) {
+      this.renderer.canvas.style.cursor = '';
+    }
     const tier = this.rateYourselfState.tiers[this.rateYourselfState.selectedIndex];
     this.startNewGame(tier.level, tier.bonus);
   }
@@ -284,6 +362,9 @@ export class Game {
   }
 
   startNewGame(startingLevel = 1, startingBonus = 0) {
+    if (this.renderer && this.renderer.canvas) {
+      this.renderer.canvas.style.cursor = '';
+    }
     this.score = startingBonus;
     this.lives = 3;
     this.level = startingLevel;

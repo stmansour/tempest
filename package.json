@@ -1,0 +1,14 @@
+{
+  "name": "tempest",
+  "version": "1.0.0",
+  "description": "Atari Tempest 1981 QuadraScan Vector Arcade Recreation",
+  "type": "module",
+  "scripts": {
+    "lint": "npx eslint js/ candidates/tempest.js --no-warn-ignored",
+    "lint:fix": "npx eslint js/ --fix",
+    "validate": "npm run lint"
+  },
+  "devDependencies": {
+    "eslint": "^9.0.0"
+  }
+}

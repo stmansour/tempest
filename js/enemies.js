@@ -1032,7 +1032,7 @@ export class EnemyManager {
     }
   }
 
-  createExplosion(pos, color = '#ffffff', count = 1, lane = -1, z = 1.0) {
+  createExplosion(pos, color = '#ffffff', _count = 1, lane = -1, z = 1.0) {
     // Authentic 1981 Atari Tempest stationary white sunburst explosion
     this.particles.push({
       isSunburst: true,

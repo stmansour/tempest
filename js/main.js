@@ -218,30 +218,11 @@ window.addEventListener('DOMContentLoaded', () => {
       }
       game.showRateYourself();
     } else if (game.state === GameState.RATE_YOURSELF) {
-      const rect = canvas.getBoundingClientRect();
-      const clickX = (e.clientX - rect.left) * (canvas.width / rect.width);
-      const cx = renderer.viewport.centerX;
-      const tiers = game.rateYourselfState.tiers;
-      const colSpacing = 68;
-      const startX = cx - ((tiers.length - 1) * colSpacing) * 0.5 + 24;
-      let clickedTier = -1;
-      for (let i = 0; i < tiers.length; i++) {
-        const colX = startX + i * colSpacing;
-        if (Math.abs(clickX - colX) < colSpacing * 0.5) {
-          clickedTier = i;
-          break;
-        }
+      const tierIdx = game.getRateYourselfTierAtPos(e.clientX, e.clientY);
+      if (tierIdx !== -1) {
+        game.rateYourselfState.selectedIndex = tierIdx;
       }
-      if (clickedTier !== -1) {
-        if (game.rateYourselfState.selectedIndex === clickedTier) {
-          game._commitRateYourself();
-        } else {
-          game.rateYourselfState.selectedIndex = clickedTier;
-          if (audio && audio.playLetterCycle) audio.playLetterCycle();
-        }
-      } else {
-        game._commitRateYourself();
-      }
+      game._commitRateYourself();
     }
   });
 
