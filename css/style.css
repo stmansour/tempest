@@ -58,6 +58,43 @@ body {
   background: #00e5ff;
 }
 
+/* Top Bar Navigation: Return to Arcade */
+.top-nav {
+  height: 28px;
+  padding: 4px 14px;
+  background: #0a0d14;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+.top-nav a {
+  color: #dcc293;
+  text-decoration: none;
+  font-family: Arial, sans-serif;
+  font-size: 12px;
+  font-weight: bold;
+  letter-spacing: 0.5px;
+  transition: color 0.2s ease, text-shadow 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+}
+
+.top-nav a:hover {
+  color: #00e5ff;
+  text-shadow: 0 0 8px rgba(0, 229, 255, 0.6);
+}
+
+.top-nav-tag {
+  font-family: Arial, sans-serif;
+  font-size: 10px;
+  color: #525d70;
+  letter-spacing: 1px;
+}
+
 /* Marquee Header Artwork */
 .marquee-art-card {
   position: sticky;
