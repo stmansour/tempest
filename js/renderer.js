@@ -1686,9 +1686,10 @@ export class VectorRenderer {
     const cy = this.viewport.centerY;
 
     // Header banner
-    this.drawVectorText('GREAT SCORE!', cx, cy - 140, 20, '#00ffff', 'center');
-    this.drawVectorText(String(initialsState.score).padStart(6, '0'), cx, cy - 95, 26, '#ffff00', 'center');
-    this.drawVectorText('ENTER YOUR INITIALS', cx, cy - 45, 14, '#ffffff', 'center');
+    this.drawVectorText('GREAT SCORE!', cx, cy - 145, 20, '#00ffff', 'center');
+    this.drawVectorText(String(initialsState.score).padStart(6, '0'), cx, cy - 105, 26, '#ffff00', 'center');
+    this.drawVectorText(`LEVEL ${initialsState.level || 1}`, cx, cy - 70, 14, '#00ffaa', 'center');
+    this.drawVectorText('ENTER YOUR INITIALS', cx, cy - 35, 14, '#ffffff', 'center');
 
     // 3 Letter Slots
     const letters = initialsState.letters;
@@ -1732,9 +1733,10 @@ export class VectorRenderer {
     this.drawVectorText('HIGH SCORES', cx, topY, 22, '#00ffff', 'center');
 
     const headerY = topY + 45;
-    this.drawVectorText('RANK', cx - 130, headerY, 13, '#ffff00', 'left');
-    this.drawVectorText('SCORE', cx - 30, headerY, 13, '#ffff00', 'left');
-    this.drawVectorText('NAME', cx + 90, headerY, 13, '#ffff00', 'left');
+    this.drawVectorText('RANK', cx - 165, headerY, 13, '#ffff00', 'left');
+    this.drawVectorText('SCORE', cx - 80, headerY, 13, '#ffff00', 'left');
+    this.drawVectorText('LEVEL', cx + 30, headerY, 13, '#ffff00', 'left');
+    this.drawVectorText('NAME', cx + 115, headerY, 13, '#ffff00', 'left');
 
     const startRowY = headerY + 28;
     const rowHeight = 24;
@@ -1744,12 +1746,14 @@ export class VectorRenderer {
       const rowY = startRowY + i * rowHeight;
       const rankStr = (i === 0) ? ' 1ST' : (i === 1) ? ' 2ND' : (i === 2) ? ' 3RD' : ` ${i + 1}TH`;
       const scoreStr = String(entry.score).padStart(6, '0');
+      const levelStr = String(entry.level || 1).padStart(2, ' ');
       const nameStr = (entry.initials || '   ').padEnd(3, ' ');
       const color = (i === 0) ? '#00ffff' : (i < 3) ? '#ffff00' : '#ffffff';
 
-      this.drawVectorText(rankStr, cx - 130, rowY, 12, color, 'left');
-      this.drawVectorText(scoreStr, cx - 30, rowY, 12, color, 'left');
-      this.drawVectorText(nameStr, cx + 90, rowY, 12, color, 'left');
+      this.drawVectorText(rankStr, cx - 165, rowY, 12, color, 'left');
+      this.drawVectorText(scoreStr, cx - 80, rowY, 12, color, 'left');
+      this.drawVectorText(levelStr, cx + 45, rowY, 12, color, 'left');
+      this.drawVectorText(nameStr, cx + 115, rowY, 12, color, 'left');
     }
 
     // Flashing Press Start at bottom

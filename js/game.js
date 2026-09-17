@@ -87,14 +87,14 @@ export const RATE_YOURSELF_TIERS = ALL_RATE_YOURSELF_TIERS.slice(0, 5).map(t => 
 }));
 
 export const DEFAULT_HIGH_SCORES = [
-  { score: 192689, initials: 'BVD' }, // Top flyer score
-  { score: 154200, initials: 'DFT' }, // Dave Theurer
-  { score: 121850, initials: 'MH ' }, // Morgan Hoff
-  { score: 98400,  initials: 'PJM' },
-  { score: 75100,  initials: 'HEB' },
-  { score: 52000,  initials: 'LDS' },
-  { score: 35400,  initials: 'RRR' },
-  { score: 20000,  initials: 'DJE' }
+  { score: 192689, level: 16, initials: 'BVD' }, // Top flyer score
+  { score: 154200, level: 14, initials: 'DFT' }, // Dave Theurer
+  { score: 121850, level: 12, initials: 'MH ' }, // Morgan Hoff
+  { score: 98400,  level: 10, initials: 'PJM' },
+  { score: 75100,  level: 8,  initials: 'HEB' },
+  { score: 52000,  level: 6,  initials: 'LDS' },
+  { score: 35400,  level: 4,  initials: 'RRR' },
+  { score: 20000,  level: 2,  initials: 'DJE' }
 ];
 
 export class Game {
@@ -171,7 +171,12 @@ export class Game {
       } else if (this.state === GameState.PLAYER_DYING) {
         // Player drumming fire while respawning: buffer to fire immediately on spawn!
         this.bufferedFireOnSpawn = true;
-      } else if (this.state === GameState.ATTRACT || this.state === GameState.GAME_OVER || this.state === GameState.HIGH_SCORES) {
+      } else if (this.state === GameState.GAME_OVER) {
+        // If player presses fire during GAME OVER (after 0.5s death debounce), finish game over immediately
+        if (this.stateTimer <= 2.7) {
+          this._finishGameOver();
+        }
+      } else if (this.state === GameState.ATTRACT || this.state === GameState.HIGH_SCORES) {
         this.showRateYourself();
       } else if (this.state === GameState.RATE_YOURSELF) {
         if (this.rateYourselfState && this.rateYourselfState.debounceTimer <= 0) {
@@ -244,7 +249,11 @@ export class Game {
             this._commitRateYourself();
           }
         }
-      } else if (this.state === GameState.ATTRACT || this.state === GameState.GAME_OVER || this.state === GameState.HIGH_SCORES) {
+      } else if (this.state === GameState.GAME_OVER) {
+        if ((e.code === 'Space' || e.code === 'Enter' || e.code === 'Digit1') && this.stateTimer <= 2.7) {
+          this._finishGameOver();
+        }
+      } else if (this.state === GameState.ATTRACT || this.state === GameState.HIGH_SCORES) {
         if (e.code === 'Space' || e.code === 'Enter' || e.code === 'Digit1') {
           this.showRateYourself();
         }
@@ -345,13 +354,17 @@ export class Game {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
+          return parsed.map(entry => ({
+            score: Number(entry.score) || 0,
+            level: Number(entry.level) || 1,
+            initials: (entry.initials || 'AAA').slice(0, 3)
+          }));
         }
       }
     } catch (e) {
       // Ignore
     }
-    return [...DEFAULT_HIGH_SCORES];
+    return DEFAULT_HIGH_SCORES.map(entry => ({ ...entry }));
   }
 
   setBonusLifeInterval(val) {
@@ -379,9 +392,10 @@ export class Game {
     return score > this.highScores[this.highScores.length - 1].score;
   }
 
-  _recordHighScore(initials, score) {
+  _recordHighScore(initials, score, level) {
     const cleanInitials = (initials || 'AAA').toUpperCase().slice(0, 3).padEnd(3, ' ');
-    this.highScores.push({ score, initials: cleanInitials });
+    const entryLevel = Number(level) || 1;
+    this.highScores.push({ score, level: entryLevel, initials: cleanInitials });
     this.highScores.sort((a, b) => b.score - a.score);
     this.highScores = this.highScores.slice(0, 8);
     this.highScore = this.highScores[0].score;
@@ -399,6 +413,7 @@ export class Game {
         <div class="leaderboard-row${rankClass}">
           <span class="leaderboard-rank">${rank}</span>
           <span class="leaderboard-initials">${entry.initials}</span>
+          <span class="leaderboard-level">LVL ${entry.level || 1}</span>
           <span class="leaderboard-score">${String(entry.score).padStart(6, '0')}</span>
         </div>
       `;
@@ -426,7 +441,7 @@ export class Game {
     this.initialsState.currentIndex++;
     if (this.initialsState.currentIndex >= 3) {
       const initials = this.initialsState.letters.join('');
-      this._recordHighScore(initials, this.initialsState.score);
+      this._recordHighScore(initials, this.initialsState.score, this.initialsState.level);
       this.state = GameState.HIGH_SCORES;
       this.stateTimer = 5.0; // Display high score table for 5s then return to attract
       if (this.audio && this.audio.playHighScoreFanfare) {
@@ -834,29 +849,34 @@ export class Game {
     }
   }
 
+  _finishGameOver() {
+    if (this._qualifiesForHighScore(this.score)) {
+      this.state = GameState.ENTER_INITIALS;
+      this.stateTimer = 0;
+      this.initialsState = {
+        letters: ['A', 'A', 'A'],
+        currentIndex: 0,
+        score: this.score,
+        level: this.level
+      };
+      if (this.audio && this.audio.stopPulsarHum) this.audio.stopPulsarHum(true);
+      if (this.audio && this.audio.playHighScoreFanfare) {
+        this.audio.playHighScoreFanfare();
+      }
+    } else {
+      this.state = GameState.ATTRACT;
+      this.resetHiWaveIfNoCredits();
+      if (this.audio && this.audio.stopPulsarHum) this.audio.stopPulsarHum(true);
+      const overlay = document.getElementById('ui-overlay');
+      if (overlay) overlay.classList.remove('hidden');
+    }
+  }
+
   _updateGameOver(dt) {
     this.stateTimer -= dt;
     this.enemies.update(dt, this.player, null, null);
     if (this.stateTimer <= 0) {
-      if (this._qualifiesForHighScore(this.score)) {
-        this.state = GameState.ENTER_INITIALS;
-        this.stateTimer = 0;
-        this.initialsState = {
-          letters: ['A', 'A', 'A'],
-          currentIndex: 0,
-          score: this.score
-        };
-        if (this.audio && this.audio.stopPulsarHum) this.audio.stopPulsarHum(true);
-        if (this.audio && this.audio.playHighScoreFanfare) {
-          this.audio.playHighScoreFanfare();
-        }
-      } else {
-        this.state = GameState.ATTRACT;
-        this.resetHiWaveIfNoCredits();
-        if (this.audio && this.audio.stopPulsarHum) this.audio.stopPulsarHum(true);
-        const overlay = document.getElementById('ui-overlay');
-        if (overlay) overlay.classList.remove('hidden');
-      }
+      this._finishGameOver();
     }
   }
 
@@ -865,7 +885,11 @@ export class Game {
     // 60-second arcade timeout
     if (this.stateTimer >= 60) {
       const initials = (this.initialsState ? this.initialsState.letters.join('') : 'AAA');
-      this._recordHighScore(initials, this.initialsState ? this.initialsState.score : this.score);
+      this._recordHighScore(
+        initials,
+        this.initialsState ? this.initialsState.score : this.score,
+        this.initialsState ? this.initialsState.level : this.level
+      );
       this.state = GameState.HIGH_SCORES;
       this.stateTimer = 5.0;
     }

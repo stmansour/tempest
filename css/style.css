@@ -985,12 +985,22 @@ body {
 }
 
 .leaderboard-initials {
-  width: 50px;
+  width: 44px;
   letter-spacing: 2px;
   font-weight: bold;
 }
 
+.leaderboard-level {
+  width: 62px;
+  color: #00ffaa;
+  font-size: 9px;
+  letter-spacing: 1px;
+  opacity: 0.9;
+  text-align: center;
+}
+
 .leaderboard-score {
+  flex: 1;
   text-align: right;
   font-variant-numeric: tabular-nums;
 }

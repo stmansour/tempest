@@ -261,7 +261,13 @@ window.addEventListener('DOMContentLoaded', () => {
       game.resumeGame();
       return;
     }
-    if (game.state === GameState.ATTRACT || game.state === GameState.GAME_OVER || game.state === GameState.HIGH_SCORES) {
+    if (game.state === GameState.GAME_OVER) {
+      if (game.stateTimer <= 2.7) {
+        game._finishGameOver();
+      }
+      return;
+    }
+    if (game.state === GameState.ATTRACT || game.state === GameState.HIGH_SCORES) {
       if (credits > 0) {
         credits--;
         game.credits = credits;
@@ -364,7 +370,16 @@ window.addEventListener('DOMContentLoaded', () => {
       }
     }
 
-    if (game.state === GameState.ATTRACT || game.state === GameState.GAME_OVER || game.state === GameState.HIGH_SCORES) {
+    if (game.state === GameState.GAME_OVER) {
+      if (['Space', 'Enter', 'Digit1'].includes(e.code) && game.stateTimer <= 2.7) {
+        e.preventDefault();
+        unlockAudio();
+        game._finishGameOver();
+      }
+      return;
+    }
+
+    if (game.state === GameState.ATTRACT || game.state === GameState.HIGH_SCORES) {
       if (['Space', 'Enter', 'Digit1', 'KeyC', 'ArrowLeft', 'ArrowRight', 'KeyA', 'KeyD'].includes(e.code)) {
         e.preventDefault();
         unlockAudio();
@@ -385,6 +400,10 @@ window.addEventListener('DOMContentLoaded', () => {
       }
     } else if (game.state === GameState.RATE_YOURSELF) {
       if (['ArrowLeft', 'KeyA', 'ArrowRight', 'KeyD', 'Space', 'Enter', 'Digit1'].includes(e.code)) {
+        e.preventDefault();
+      }
+    } else if (game.state === GameState.ENTER_INITIALS) {
+      if (['ArrowLeft', 'KeyA', 'ArrowRight', 'KeyD', 'Space', 'Enter', 'Backspace'].includes(e.code)) {
         e.preventDefault();
       }
     } else if (game.state === GameState.PLAYING && game.player.isAlive) {
