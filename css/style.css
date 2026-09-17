@@ -519,6 +519,14 @@ body {
   align-items: baseline;
   justify-content: space-between;
   margin-bottom: 3px;
+  gap: 6px;
+}
+
+.enemy-name-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
 .enemy-name {
@@ -526,6 +534,19 @@ body {
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 1px;
+}
+
+.enemy-level-badge {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 7px;
+  font-weight: 800;
+  color: #ffaa00;
+  background: rgba(255, 170, 0, 0.12);
+  border: 1px solid rgba(255, 170, 0, 0.4);
+  border-radius: 3px;
+  padding: 1px 5px;
+  letter-spacing: 0.6px;
+  white-space: nowrap;
 }
 
 .enemy-pts {
@@ -632,6 +653,137 @@ body {
   height: 100%;
   background: radial-gradient(circle at center, rgba(0, 220, 255, 0.02) 0%, rgba(0, 0, 0, 0) 80%);
   z-index: 4;
+}
+
+/* ==========================================================================
+   GAME PAUSED BLUR & OVERLAY
+   ========================================================================== */
+#game-stage.game-paused {
+  z-index: 160;
+}
+
+#game-stage.game-paused #game-canvas {
+  filter: blur(10px) brightness(0.55);
+  transition: filter 0.18s ease-out;
+}
+
+.pause-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 160;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 0.18s ease-out, visibility 0.18s ease-out;
+  user-select: none;
+  cursor: pointer;
+}
+
+.pause-overlay.hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.pause-dialog {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 34px 44px;
+  background: rgba(4, 8, 18, 0.92);
+  border: 2px solid #00e5ff;
+  border-radius: 8px;
+  box-shadow: 0 0 30px rgba(0, 229, 255, 0.45), inset 0 0 25px rgba(0, 229, 255, 0.15);
+  text-align: center;
+  min-width: 360px;
+  max-width: 90vw;
+  box-sizing: border-box;
+}
+
+.pause-title {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 18px;
+  font-weight: 700;
+  color: #ffff00;
+  letter-spacing: 2px;
+  text-shadow: 0 0 8px rgba(255, 255, 0, 0.7), 0 0 16px rgba(255, 255, 0, 0.4);
+  margin-bottom: 20px;
+}
+
+.pause-message {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 15px;
+  color: #ffffff;
+  letter-spacing: 1.5px;
+  line-height: 1.6;
+  text-shadow: 0 0 10px #00ffff, 0 0 20px rgba(0, 255, 255, 0.85);
+  animation: pausePromptPulse 1.6s ease-in-out infinite;
+}
+
+.pause-subtext {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 10px;
+  font-weight: 600;
+  color: #00e5ff;
+  letter-spacing: 1.5px;
+  margin-top: 22px;
+  opacity: 0.75;
+  text-transform: uppercase;
+}
+
+.pause-glow-corner {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-color: #ffff00;
+  border-style: solid;
+}
+
+.pause-glow-corner.tl {
+  top: -3px;
+  left: -3px;
+  border-width: 3px 0 0 3px;
+}
+
+.pause-glow-corner.tr {
+  top: -3px;
+  right: -3px;
+  border-width: 3px 3px 0 0;
+}
+
+.pause-glow-corner.bl {
+  bottom: -3px;
+  left: -3px;
+  border-width: 0 0 3px 3px;
+}
+
+.pause-glow-corner.br {
+  bottom: -3px;
+  right: -3px;
+  border-width: 0 3px 3px 0;
+}
+
+@keyframes pausePromptPulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+    text-shadow: 0 0 10px #00ffff, 0 0 22px rgba(0, 255, 255, 0.9);
+  }
+  50% {
+    opacity: 0.75;
+    transform: scale(0.985);
+    text-shadow: 0 0 5px #00ffff, 0 0 10px rgba(0, 255, 255, 0.5);
+  }
 }
 
 /* Responsive fallback for smaller screens */

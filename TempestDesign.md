@@ -247,12 +247,23 @@ When the Claw collides with a Spike during level transitions or dies in combat, 
 
 ---
 
-## 9. Pulsars & Fuseballs: Geometry, Spawning, & Modulated Audio
+## 9. Enemy Introduction Progression, Geometry, & Audio
+
+### Authentic Arcade Enemy Introduction Levels
+| Enemy Type | First Introduced | Behavior & Characteristics |
+| :--- | :---: | :--- |
+| **Flippers** | **Level 1** | Core enemy; cartwheels between lanes and crawls outer rim to capture claw. |
+| **Tankers** (Flipper) | **Level 3** | Ascending diamond pods; splits into 2 aggressive Flippers when blasted. |
+| **Spikers** | **Level 4** | Spins outward laying green spikes down lanes (dangerous during warp dive). |
+| **Fuseballs** | **Level 11** | Crackling multi-colored electrical stars crawling unpredictably on lane divider ribs. |
+| **Pulsars** | **Level 17** | Oscillating electrified waveforms; electrifies lanes and flips when dormant. |
+| **Fuseball Tankers** | **Level 33** | Diamond pods splitting into 2 Fuseballs upon destruction. |
+| **Pulsar Tankers** | **Level 41** | Diamond pods splitting into 2 Pulsars upon destruction. |
 
 ### A. Pulsars
 * **Spawn Progression**:
-  * Wave 3+: Introduced inside Tankers (split into 2 Pulsars upon destruction).
-  * Wave 9+: Spawn directly from the abyss into tube lanes.
+  * Wave 17+: Introduced into tube lanes from the abyss.
+  * Wave 41+: Introduced inside Pulsar Tankers (split into 2 Pulsars upon destruction).
 * **Waveform Geometry**:
   * Spans across the active lane at depth $z$.
   * Composed of 6 vector segments forming an oscillating sawtooth/zigzag waveform.
@@ -266,8 +277,8 @@ When the Claw collides with a Spike during level transitions or dies in combat, 
 
 ### B. Fuseballs
 * **Spawn Progression**:
-  * Wave 3+: Introduced inside Tankers (split into 2 Fuseballs).
   * Wave 11+: Spawn directly onto the lane divider boundary ribs.
+  * Wave 33+: Introduced inside Fuseball Tankers (split into 2 Fuseballs).
 * **Multi-Color Electric Spark Visuals**:
   * Travels strictly along the boundary ribs between lanes.
   * Zips unpredictably down and up the rib, reversing direction every 0.25–0.85s.

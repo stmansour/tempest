@@ -60,10 +60,10 @@
           <span class="bonus-claw-text">BONUS CLAW EVERY <span id="sidebar-bonus-pts">20,000</span> PTS</span>
         </div>
 
-        <button id="guide-toggle-btn" class="arcade-guide-btn" tabindex="-1" title="View Arcade Guide, Scoring & Controls [TAB]">
+        <button id="guide-toggle-btn" class="arcade-guide-btn" tabindex="-1" title="View Arcade Guide, Scoring & Controls [TAB / ESC]">
           <span class="guide-btn-icon">⚡</span>
           <span class="guide-btn-text">ARCADE MANUAL &amp; STATS</span>
-          <span class="guide-btn-key">[TAB]</span>
+          <span class="guide-btn-key">[TAB / ESC]</span>
         </button>
       </section>
 
@@ -153,10 +153,13 @@
               </div>
               <div class="enemy-info-col">
                 <div class="enemy-header">
-                  <span class="enemy-name" style="color: #00e5ff;">FUSEBALL</span>
+                  <div class="enemy-name-group">
+                    <span class="enemy-name" style="color: #00e5ff;">FUSEBALL</span>
+                    <span class="enemy-level-badge">INTRODUCED LEVEL 11</span>
+                  </div>
                   <span class="enemy-pts">250 &bull; 500 &bull; 750 PTS</span>
                 </div>
-                <p class="enemy-desc">Crackling electrical star. Crawls unpredictably along lane divider ribs.</p>
+                <p class="enemy-desc">First appears at Level 11. Crackling electrical star. Crawls unpredictably along lane divider ribs.</p>
               </div>
             </div>
 
@@ -169,10 +172,13 @@
               </div>
               <div class="enemy-info-col">
                 <div class="enemy-header">
-                  <span class="enemy-name" style="color: #ffff00;">PULSARS</span>
+                  <div class="enemy-name-group">
+                    <span class="enemy-name" style="color: #ffff00;">PULSARS</span>
+                    <span class="enemy-level-badge">INTRODUCED LEVEL 17</span>
+                  </div>
                   <span class="enemy-pts">200 PTS</span>
                 </div>
-                <p class="enemy-desc">Electrifies lanes and extinguishes rim rungs. Flips along rim when dormant to hunt your claw. Shoot only when dormant!</p>
+                <p class="enemy-desc">First appears at Level 17. Electrifies lanes and extinguishes rim rungs. Flips along rim when dormant to hunt your claw. Shoot only when dormant!</p>
               </div>
             </div>
 
@@ -186,10 +192,13 @@
               </div>
               <div class="enemy-info-col">
                 <div class="enemy-header">
-                  <span class="enemy-name" style="color: #ff0000;">FLIPPERS</span>
+                  <div class="enemy-name-group">
+                    <span class="enemy-name" style="color: #ff0000;">FLIPPERS</span>
+                    <span class="enemy-level-badge">INTRODUCED LEVEL 1</span>
+                  </div>
                   <span class="enemy-pts">150 PTS</span>
                 </div>
-                <p class="enemy-desc">Cartwheels between lanes and crawls around outer rim to capture your claw.</p>
+                <p class="enemy-desc">Core enemy from Level 1. Cartwheels between lanes and crawls around outer rim to capture your claw.</p>
               </div>
             </div>
 
@@ -204,10 +213,13 @@
               </div>
               <div class="enemy-info-col">
                 <div class="enemy-header">
-                  <span class="enemy-name" style="color: #cc00ff;">TANKERS</span>
+                  <div class="enemy-name-group">
+                    <span class="enemy-name" style="color: #cc00ff;">TANKERS</span>
+                    <span class="enemy-level-badge">INTRODUCED LEVEL 3</span>
+                  </div>
                   <span class="enemy-pts">100 PTS</span>
                 </div>
-                <p class="enemy-desc">Ascending diamond pods. Splinters into two aggressive Flippers when blasted.</p>
+                <p class="enemy-desc">Introduced at Level 3. Ascending diamond pods that splinter into two Flippers. (Fuseball Tankers appear at Level 33; Pulsar Tankers at Level 41).</p>
               </div>
             </div>
 
@@ -220,10 +232,13 @@
               </div>
               <div class="enemy-info-col">
                 <div class="enemy-header">
-                  <span class="enemy-name" style="color: #00ff00;">SPIKERS</span>
+                  <div class="enemy-name-group">
+                    <span class="enemy-name" style="color: #00ff00;">SPIKERS</span>
+                    <span class="enemy-level-badge">INTRODUCED LEVEL 4</span>
+                  </div>
                   <span class="enemy-pts">50 PTS</span>
                 </div>
-                <p class="enemy-desc">Spins outward laying green spikes down lanes. Blaster lasers can shave spikes.</p>
+                <p class="enemy-desc">Introduced at Level 4. Spins outward laying green spikes down lanes. Blaster lasers can shave spikes.</p>
               </div>
             </div>
 
@@ -258,6 +273,14 @@
               <span class="key-tag">W / N</span>
               <span class="action-tag">Level Warp Transition</span>
             </div>
+            <div class="instruction-item">
+              <span class="key-tag">TAB / P</span>
+              <span class="action-tag">Pause Game &bull; View Manual</span>
+            </div>
+            <div class="instruction-item">
+              <span class="key-tag">ESC</span>
+              <span class="action-tag">Resume Game &bull; Close Manual</span>
+            </div>
           </div>
         </section>
 
@@ -283,6 +306,19 @@
     <main id="game-stage">
       <canvas id="game-canvas" tabindex="0"></canvas>
       <div class="crt-glow"></div>
+
+      <!-- Pause Overlay -->
+      <div id="pause-overlay" class="pause-overlay hidden" aria-hidden="true">
+        <div class="pause-dialog">
+          <div class="pause-glow-corner tl"></div>
+          <div class="pause-glow-corner tr"></div>
+          <div class="pause-glow-corner bl"></div>
+          <div class="pause-glow-corner br"></div>
+          <div class="pause-title">GAME PAUSED</div>
+          <div class="pause-message">PRESS ESC TO CONTINUE</div>
+          <div class="pause-subtext">OR PRESS TAB &bull; CLICK TO RESUME</div>
+        </div>
+      </div>
     </main>
   </div>
 

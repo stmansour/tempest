@@ -84,6 +84,9 @@ window.addEventListener('DOMContentLoaded', () => {
     if (!stage) return;
     const rect = stage.getBoundingClientRect();
     renderer.resize(rect.width, rect.height);
+    if (game.isPaused) {
+      game.render();
+    }
   }
 
   window.addEventListener('resize', handleResize);
@@ -113,6 +116,10 @@ window.addEventListener('DOMContentLoaded', () => {
       unlockAudio();
       startButton.blur();
       canvas.focus();
+      if (game.isPaused) {
+        game.resumeGame();
+        return;
+      }
       if (game.state === GameState.ATTRACT || game.state === GameState.GAME_OVER || game.state === GameState.HIGH_SCORES) {
         if (credits > 0) {
           credits--;
@@ -136,7 +143,7 @@ window.addEventListener('DOMContentLoaded', () => {
       unlockAudio();
       fireButton.blur();
       canvas.focus();
-      if (game.state === GameState.PLAYING && game.player.isAlive) {
+      if (!game.isPaused && game.state === GameState.PLAYING && game.player.isAlive) {
         game.player.fire(audio);
       }
     });
@@ -148,7 +155,7 @@ window.addEventListener('DOMContentLoaded', () => {
       unlockAudio();
       zapButton.blur();
       canvas.focus();
-      if (game.state === GameState.PLAYING && game.player.isAlive) {
+      if (!game.isPaused && game.state === GameState.PLAYING && game.player.isAlive) {
         const pts = game.player.useSuperzapper(audio, game.enemies);
         if (pts > 0) game.addScore(pts);
       }
@@ -161,8 +168,20 @@ window.addEventListener('DOMContentLoaded', () => {
       unlockAudio();
       warpButton.blur();
       canvas.focus();
-      if (game.state === GameState.PLAYING && game.player.isAlive) {
+      if (!game.isPaused && game.state === GameState.PLAYING && game.player.isAlive) {
         game.triggerLevelWarp();
+      }
+    });
+  }
+
+  // Pause overlay click to resume
+  const pauseOverlay = document.getElementById('pause-overlay');
+  if (pauseOverlay) {
+    pauseOverlay.addEventListener('click', () => {
+      unlockAudio();
+      if (game.isPaused) {
+        closeGuideDrawer();
+        game.resumeGame();
       }
     });
   }
@@ -201,7 +220,15 @@ window.addEventListener('DOMContentLoaded', () => {
     guideToggleBtn.addEventListener('click', () => {
       unlockAudio();
       guideToggleBtn.blur();
-      toggleGuideDrawer();
+      if (game.isPaused) {
+        closeGuideDrawer();
+        game.resumeGame();
+      } else if (game.isGameRunning()) {
+        openGuideDrawer();
+        game.pauseGame();
+      } else {
+        toggleGuideDrawer();
+      }
     });
   }
 
@@ -209,12 +236,18 @@ window.addEventListener('DOMContentLoaded', () => {
     drawerCloseBtn.addEventListener('click', () => {
       unlockAudio();
       closeGuideDrawer();
+      if (game.isPaused) {
+        game.resumeGame();
+      }
     });
   }
 
   if (drawerBackdrop) {
     drawerBackdrop.addEventListener('click', () => {
       closeGuideDrawer();
+      if (game.isPaused) {
+        game.resumeGame();
+      }
     });
   }
 
@@ -223,6 +256,11 @@ window.addEventListener('DOMContentLoaded', () => {
   canvas.addEventListener('click', (e) => {
     unlockAudio();
     canvas.focus();
+    if (game.isPaused) {
+      closeGuideDrawer();
+      game.resumeGame();
+      return;
+    }
     if (game.state === GameState.ATTRACT || game.state === GameState.GAME_OVER || game.state === GameState.HIGH_SCORES) {
       if (credits > 0) {
         credits--;
@@ -246,12 +284,32 @@ window.addEventListener('DOMContentLoaded', () => {
 
   // Keyboard interactions across game states
   window.addEventListener('keydown', (e) => {
-    // Arcade Guide Drawer toggle (Tab / Escape / H)
-    if (e.code === 'Tab') {
-      e.preventDefault();
-      toggleGuideDrawer();
+    // 1. If paused: ESC or Tab (or P) resumes the game immediately and closes manual
+    if (game.isPaused) {
+      if (e.code === 'Escape' || e.code === 'Tab' || e.code === 'KeyP') {
+        e.preventDefault();
+        unlockAudio();
+        closeGuideDrawer();
+        game.resumeGame();
+        return;
+      }
       return;
     }
+
+    // 2. Tab key (and P key) handling:
+    // If a game is running, pause the game right there, open Arcade Manual & Stats, blur play screen & show message
+    if (e.code === 'Tab' || (e.code === 'KeyP' && !e.ctrlKey && !e.metaKey && !renderer.showDebugOverlay)) {
+      e.preventDefault();
+      if (game.isGameRunning()) {
+        openGuideDrawer();
+        game.pauseGame();
+      } else {
+        toggleGuideDrawer();
+      }
+      return;
+    }
+
+    // 3. Escape key handling when not paused:
     if (e.code === 'Escape') {
       if (guideDrawer && guideDrawer.classList.contains('open')) {
         e.preventDefault();
@@ -261,7 +319,12 @@ window.addEventListener('DOMContentLoaded', () => {
     }
     if (e.code === 'KeyH' && !e.ctrlKey && !e.metaKey && game.state !== GameState.NAME_ENTRY) {
       e.preventDefault();
-      toggleGuideDrawer();
+      if (game.isGameRunning()) {
+        openGuideDrawer();
+        game.pauseGame();
+      } else {
+        toggleGuideDrawer();
+      }
       return;
     }
 
@@ -340,8 +403,10 @@ window.addEventListener('DOMContentLoaded', () => {
     lastTime = currentTime;
 
     // Update & Render
-    game.update(dt);
-    game.render();
+    if (!game.isPaused) {
+      game.update(dt);
+      game.render();
+    }
 
     requestAnimationFrame(loop);
   }

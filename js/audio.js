@@ -60,11 +60,28 @@ export class AudioManager {
     }
   }
 
+  pause() {
+    if (this.pulsationTimer) {
+      clearTimeout(this.pulsationTimer);
+      this.pulsationTimer = null;
+    }
+    if (this.ctx && this.ctx.state === 'running') {
+      try {
+        this.ctx.suspend();
+      } catch (e) {
+        // Ignore
+      }
+    }
+  }
+
   resume() {
     if (!this.ctx) {
       this.init();
     } else if (this.ctx.state === 'suspended') {
-      this.ctx.resume();
+      this.ctx.resume().catch(() => {});
+    }
+    if (this.isPulsing && !this.pulsationTimer) {
+      this._scheduleNextPulse();
     }
   }
 

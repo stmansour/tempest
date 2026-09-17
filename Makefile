@@ -37,7 +37,7 @@ define stamp-tempest-index
 	    index.html > $(1)/index.html
 endef
 
-.PHONY: all build package clean validate serve release relsman help
+.PHONY: all build package clean validate serve play release relsman help
 
 all: build package
 
@@ -100,6 +100,8 @@ clean:
 		$(MAKE) -C $$dir clean || exit 1; \
 	done
 	@echo "*** $(APP): completed clean ***"
+
+play: serve
 
 # Preview the production distribution locally
 serve: package

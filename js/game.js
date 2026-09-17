@@ -133,6 +133,9 @@ export class Game {
     this.credits = 0;
     this.hiWave = 9; // Highest level unlocked for Rate Yourself (Atari ALWELG.MAC: HIWAVE)
 
+    // Game paused state
+    this.isPaused = false;
+
     // Rate Yourself Startup Skill Selection State
     this.rateYourselfState = {
       selectedIndex: 0,
@@ -146,6 +149,7 @@ export class Game {
     this.bufferedFireOnSpawn = false;
 
     this.input.onImmediateStep = (delta) => {
+      if (this.isPaused) return;
       const canMove = (this.state === GameState.PLAYING || 
                       (this.state === GameState.LEVEL_WARP && this.stateTimer < 2.4));
       if (canMove && this.player.isAlive) {
@@ -156,6 +160,7 @@ export class Game {
     };
 
     this.input.onImmediateFire = () => {
+      if (this.isPaused) return;
       const canFire = (this.state === GameState.PLAYING || 
                       (this.state === GameState.LEVEL_WARP && this.stateTimer < 2.4));
       if (canFire && this.player.isAlive) {
@@ -178,6 +183,7 @@ export class Game {
     };
 
     this.input.onImmediateAim = (screenX, screenY) => {
+      if (this.isPaused) return;
       const canAim = (this.state === GameState.PLAYING || 
                      (this.state === GameState.LEVEL_WARP && this.stateTimer < 2.4));
       if (canAim && this.player.isAlive && !this.input.isLocked) {
@@ -189,6 +195,7 @@ export class Game {
     };
 
     this.input.onMouseMove = (screenX, screenY) => {
+      if (this.isPaused) return;
       if (this.state === GameState.RATE_YOURSELF) {
         const tierIdx = this.getRateYourselfTierAtPos(screenX, screenY);
         if (tierIdx !== -1) {
@@ -210,6 +217,7 @@ export class Game {
     };
 
     this.input.onMouseDown = (e) => {
+      if (this.isPaused) return false;
       if (this.state === GameState.RATE_YOURSELF) {
         if (e.button === 0) {
           const tierIdx = this.getRateYourselfTierAtPos(e.clientX, e.clientY);
@@ -225,6 +233,7 @@ export class Game {
 
     // Keyboard input hook for typing initials directly or navigating Rate Yourself
     this.input.onKeyDown = (e) => {
+      if (this.isPaused) return;
       if (this.state === GameState.RATE_YOURSELF) {
         if (e.code === 'ArrowLeft' || e.code === 'KeyA') {
           this._stepRateYourself(-1);
@@ -260,6 +269,74 @@ export class Game {
 
     // Populate sidebar leaderboard
     this._updateSidebarLeaderboard();
+  }
+
+  isGameRunning() {
+    return this.state === GameState.PLAYING ||
+           this.state === GameState.LEVEL_WARP ||
+           this.state === GameState.PLAYER_DYING;
+  }
+
+  pauseGame() {
+    if (!this.isGameRunning() || this.isPaused) return;
+    this.isPaused = true;
+
+    if (document.pointerLockElement) {
+      try {
+        document.exitPointerLock();
+      } catch (e) {
+        // Ignore
+      }
+    }
+
+    if (this.input && typeof this.input.resetAccumulators === 'function') {
+      this.input.resetAccumulators();
+    }
+
+    if (this.audio && typeof this.audio.pause === 'function') {
+      this.audio.pause();
+    }
+
+    const stage = document.getElementById('game-stage');
+    if (stage) stage.classList.add('game-paused');
+    const overlay = document.getElementById('pause-overlay');
+    if (overlay) {
+      overlay.classList.remove('hidden');
+      overlay.setAttribute('aria-hidden', 'false');
+    }
+  }
+
+  resumeGame() {
+    if (!this.isPaused) return;
+    this.isPaused = false;
+
+    if (this.input && typeof this.input.resetAccumulators === 'function') {
+      this.input.resetAccumulators();
+    }
+
+    const stage = document.getElementById('game-stage');
+    if (stage) stage.classList.remove('game-paused');
+    const overlay = document.getElementById('pause-overlay');
+    if (overlay) {
+      overlay.classList.add('hidden');
+      overlay.setAttribute('aria-hidden', 'true');
+    }
+
+    if (this.audio && typeof this.audio.resume === 'function') {
+      this.audio.resume();
+    }
+
+    if (this.renderer && this.renderer.canvas) {
+      this.renderer.canvas.focus();
+    }
+  }
+
+  togglePause() {
+    if (this.isPaused) {
+      this.resumeGame();
+    } else if (this.isGameRunning()) {
+      this.pauseGame();
+    }
   }
 
   _loadHighScores() {
@@ -371,6 +448,9 @@ export class Game {
   }
 
   showRateYourself() {
+    if (this.isPaused) {
+      this.resumeGame();
+    }
     this.state = GameState.RATE_YOURSELF;
 
     // Filter tiers up to highest odd level unlocked by hiWave (minimum 9)
@@ -487,6 +567,9 @@ export class Game {
   }
 
   startNewGame(startingLevel = 1, startingBonus = 0) {
+    if (this.isPaused) {
+      this.resumeGame();
+    }
     if (this.renderer && this.renderer.canvas) {
       this.renderer.canvas.style.cursor = '';
     }

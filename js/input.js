@@ -329,4 +329,18 @@ export class InputManager {
     this.superzapperPressed = false;
     return zap;
   }
+
+  resetAccumulators() {
+    this.pendingLaneDelta = 0;
+    this.mouseAccumulator = 0;
+    this.wheelAccumulator = 0;
+    this.firePressed = false;
+    this.superzapperPressed = false;
+    this.mouseAimPos = null;
+    this.keys.left = false;
+    this.keys.right = false;
+    this.keys.fire = false;
+    this.keys.superzapper = false;
+    this.lastKeyboardTime = performance.now();
+  }
 }

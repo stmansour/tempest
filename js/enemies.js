@@ -97,28 +97,31 @@ export class EnemyManager {
     let pulsarCount = 0;
     let fuseballCount = 0;
 
-    if (level === 1) {
+    if (level <= 2) {
+      // Levels 1-2: Flippers only (Atari arcade baseline)
       flipperCount = totalCount;
-    } else if (level === 2) {
-      spikerCount = Math.floor(totalCount * 0.35);
-      flipperCount = totalCount - spikerCount;
-    } else if (level >= 3 && level <= 8) {
-      tankerCount = Math.max(3, Math.floor(totalCount * 0.28));
-      spikerCount = Math.max(3, Math.floor(totalCount * 0.28));
+    } else if (level === 3) {
+      // Level 3: Tankers (Flipper Tankers) introduced
+      tankerCount = Math.max(2, Math.floor(totalCount * 0.28));
+      flipperCount = totalCount - tankerCount;
+    } else if (level >= 4 && level <= 10) {
+      // Level 4+: Spikers introduced (Levels 4-10: Flippers, Tankers, Spikers)
+      spikerCount = Math.max(2, Math.floor(totalCount * 0.28));
+      tankerCount = Math.max(2, Math.floor(totalCount * 0.28));
       flipperCount = Math.max(2, totalCount - tankerCount - spikerCount);
-    } else if (level === 9 || level === 10) {
-      // Wave 9+: Guaranteed Pulsars (at least 4-5) + Tankers + Spikers + Flippers
-      pulsarCount = Math.max(4, Math.floor(totalCount * 0.28));
-      tankerCount = Math.max(3, Math.floor(totalCount * 0.22));
-      spikerCount = Math.max(3, Math.floor(totalCount * 0.22));
-      flipperCount = Math.max(2, totalCount - pulsarCount - tankerCount - spikerCount);
+    } else if (level >= 11 && level <= 16) {
+      // Level 11+: Fuseballs introduced (Levels 11-16: Flippers, Tankers, Spikers, Fuseballs)
+      fuseballCount = Math.max(3, Math.floor(totalCount * 0.22));
+      tankerCount = Math.max(2, Math.floor(totalCount * 0.22));
+      spikerCount = Math.max(2, Math.floor(totalCount * 0.22));
+      flipperCount = Math.max(2, totalCount - fuseballCount - tankerCount - spikerCount);
     } else {
-      // Wave 11+: Guaranteed Fuseballs (at least 4) + Pulsars (at least 4) + Tankers + Spikers + Flippers
-      fuseballCount = Math.max(4, Math.floor(totalCount * 0.24));
-      pulsarCount = Math.max(4, Math.floor(totalCount * 0.24));
-      tankerCount = Math.max(3, Math.floor(totalCount * 0.20));
-      spikerCount = Math.max(3, Math.floor(totalCount * 0.16));
-      flipperCount = Math.max(2, totalCount - fuseballCount - pulsarCount - tankerCount - spikerCount);
+      // Level 17+: Pulsars introduced (All core enemies active)
+      pulsarCount = Math.max(3, Math.floor(totalCount * 0.24));
+      fuseballCount = Math.max(3, Math.floor(totalCount * 0.22));
+      tankerCount = Math.max(2, Math.floor(totalCount * 0.20));
+      spikerCount = Math.max(2, Math.floor(totalCount * 0.16));
+      flipperCount = Math.max(2, totalCount - pulsarCount - fuseballCount - tankerCount - spikerCount);
     }
 
     const enemyTypes = [];
@@ -126,8 +129,12 @@ export class EnemyManager {
     for (let i = 0; i < spikerCount; i++) enemyTypes.push({ type: 'spiker', color: '#00ff44' });
     for (let i = 0; i < tankerCount; i++) {
       let subType = 'flipper';
-      if (level >= 4 && Math.random() < 0.45) subType = 'pulsar';
-      else if (level >= 5 && Math.random() < 0.45) subType = 'fuse';
+      // In arcade Tempest, Fuseball Tankers appear at Level 33, Pulsar Tankers at Level 41
+      if (level >= 41 && Math.random() < 0.35) {
+        subType = 'pulsar';
+      } else if (level >= 33 && Math.random() < 0.40) {
+        subType = 'fuse';
+      }
       enemyTypes.push({ type: 'tanker', subType: subType, color: '#cc22ff' });
     }
     for (let i = 0; i < pulsarCount; i++) enemyTypes.push({ type: 'pulsar', color: '#ffff00' });
