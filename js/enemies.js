@@ -1030,20 +1030,25 @@ export class EnemyManager {
       }
       if (shotHit) continue;
 
-      // Check Spike Tips
+      // Check Spike Tips (with swept segment collision)
       const spikeZ = this.spikes.get(shot.lane);
-      if (spikeZ && shot.z <= spikeZ) {
-        shot.active = false;
-        const newZ = spikeZ - 0.09;
-        const pt = this.web.getLaneCenter(shot.lane, spikeZ);
-        this.createExplosion(pt, '#ffffff', 1, shot.lane, spikeZ);
-        if (audio) audio.playSpikeChip();
+      if (spikeZ !== undefined && spikeZ !== null) {
+        const prevZ = shot.prevZ !== undefined ? shot.prevZ : shot.z;
+        const hitSpike = (shot.z <= spikeZ) || (prevZ >= spikeZ && shot.z <= spikeZ + 0.05);
+        if (hitSpike) {
+          shot.active = false;
+          const newZ = spikeZ - 0.09;
+          const pt = this.web.getLaneCenter(shot.lane, Math.max(0.0, spikeZ));
+          this.createExplosion(pt, '#ffffff', 1, shot.lane, Math.max(0.0, spikeZ));
+          if (audio) audio.playSpikeChip();
 
-        if (newZ <= 0.05) {
-          this.spikes.delete(shot.lane);
-          if (onScore) onScore(10);
-        } else {
-          this.spikes.set(shot.lane, newZ);
+          // If chipped down to a stub or below threshold, completely obliterate it
+          if (newZ <= 0.08 || spikeZ <= 0.10) {
+            this.spikes.delete(shot.lane);
+            if (onScore) onScore(10);
+          } else {
+            this.spikes.set(shot.lane, newZ);
+          }
         }
       }
     }

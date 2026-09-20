@@ -126,9 +126,9 @@ export class InputManager {
           return;
         }
 
-        // 2. Ignore trackpad tremor (requires at least 8px deliberate movement)
+        // 2. Ignore trackpad tremor (requires at least 3px deliberate movement)
         const dist = Math.hypot(e.clientX - this.lastAimX, e.clientY - this.lastAimY);
-        if (dist < 8) return;
+        if (dist < 3) return;
 
         this.lastAimX = e.clientX;
         this.lastAimY = e.clientY;

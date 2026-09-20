@@ -349,6 +349,22 @@ export class Game {
   }
 
   _loadHighScores() {
+    if (typeof window !== 'undefined') {
+      const urlStr = window.location.href || '';
+      const search = window.location.search || '';
+      const params = new URLSearchParams(search);
+      if (params.has('resetscores') || params.has('resetscore') || /[?&#]resetscores?(?:[=&#]|$)/i.test(urlStr)) {
+        try {
+          localStorage.removeItem('tempest_highscores');
+          localStorage.removeItem('tempest_highscore');
+        } catch (e) {
+          // Ignore
+        }
+        console.log('[Tempest] High scores reset via URL parameter (?resetscores).');
+        return DEFAULT_HIGH_SCORES.map(entry => ({ ...entry }));
+      }
+    }
+
     try {
       const saved = localStorage.getItem('tempest_highscores');
       if (saved) {
@@ -365,6 +381,20 @@ export class Game {
       // Ignore
     }
     return DEFAULT_HIGH_SCORES.map(entry => ({ ...entry }));
+  }
+
+  resetHighScores() {
+    try {
+      localStorage.removeItem('tempest_highscores');
+      localStorage.removeItem('tempest_highscore');
+    } catch (e) {
+      // Ignore
+    }
+    this.highScores = DEFAULT_HIGH_SCORES.map(entry => ({ ...entry }));
+    this.highScore = this.highScores[0].score;
+    this.highScoreInitials = this.highScores[0].initials;
+    this._updateSidebarLeaderboard();
+    console.log('[Tempest] High scores reset to defaults.');
   }
 
   setBonusLifeInterval(val) {
@@ -767,24 +797,28 @@ export class Game {
       // 3. Update player entity (shot movement & fire cooldowns)
       this.player.update(dt);
 
-      // 4. Update shots and check collisions against green spikes
+      // 4. Update shots and check collisions against green spikes (with swept collision)
       for (let i = this.player.shots.length - 1; i >= 0; i--) {
         const shot = this.player.shots[i];
         if (!shot.active) continue;
 
         const spikeZ = this.enemies.spikes.get(shot.lane);
-        if (spikeZ !== undefined && shot.z <= spikeZ) {
-          shot.active = false;
-          const newZ = spikeZ - 0.09;
-          const pt = this.web.getLaneCenter(shot.lane, spikeZ);
-          this.enemies.createExplosion(pt, '#ffffff', 1, shot.lane, spikeZ);
-          if (this.audio) this.audio.playSpikeChip();
+        if (spikeZ !== undefined && spikeZ !== null) {
+          const prevZ = shot.prevZ !== undefined ? shot.prevZ : shot.z;
+          const hitSpike = (shot.z <= spikeZ) || (prevZ >= spikeZ && shot.z <= spikeZ + 0.05);
+          if (hitSpike) {
+            shot.active = false;
+            const newZ = spikeZ - 0.09;
+            const pt = this.web.getLaneCenter(shot.lane, Math.max(0.0, spikeZ));
+            this.enemies.createExplosion(pt, '#ffffff', 1, shot.lane, Math.max(0.0, spikeZ));
+            if (this.audio) this.audio.playSpikeChip();
 
-          if (newZ <= 0.05) {
-            this.enemies.spikes.delete(shot.lane);
-            this.addScore(10);
-          } else {
-            this.enemies.spikes.set(shot.lane, newZ);
+            if (newZ <= 0.08 || spikeZ <= 0.10) {
+              this.enemies.spikes.delete(shot.lane);
+              this.addScore(10);
+            } else {
+              this.enemies.spikes.set(shot.lane, newZ);
+            }
           }
         }
       }

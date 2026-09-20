@@ -222,19 +222,79 @@ export class VectorRenderer {
       }
       return bestLane;
     } else {
-      let bestLane = 0;
-      let minDistSq = Infinity;
+      // Direct Macro-Wing & Monotonic Progression Mapping for Open Webs.
+      // Eliminates 2D Euclidean Voronoi traps where vertical altitude penalties
+      // caused the cursor to stick in corners and then jump across multiple lanes.
+      const laneCount = web.laneCount;
+      if (laneCount <= 1) return 0;
 
-      for (let i = 0; i < web.laneCount; i++) {
-        const centerPos = web.getLaneCenter(i, 1.0);
-        const pScreen = this.toScreen(centerPos, web);
-        const dSq = (pScreen.x - mx) ** 2 + (pScreen.y - my) ** 2;
-        if (dSq < minDistSq) {
-          minDistSq = dSq;
-          bestLane = i;
+      const centers = [];
+      for (let i = 0; i < laneCount; i++) {
+        centers.push(this.toScreen(web.getLaneCenter(i, 1.0), web));
+      }
+
+      const cLeft = centers[0];
+      const cRight = centers[laneCount - 1];
+
+      // 1. Chevrons / V-Trenches (e.g. Level 9 Staircase [id: 13], V-Trench [id: 7])
+      // Two continuous wings meeting at a central bottom/peak vertex:
+      if (web.id === 13 || web.id === 7) {
+        const mid = Math.floor(laneCount / 2); // Lane 7 for 15-lane webs
+        const cMid = centers[mid];
+
+        if (mx <= cMid.x) {
+          // Left Wing: Lane 0 (cLeft) -> Lane 7 (cMid)
+          const spanX = Math.max(1, cMid.x - cLeft.x);
+          const spanY = cMid.y - cLeft.y;
+          const ux = Math.max(0.0, Math.min(1.0, (mx - cLeft.x) / spanX));
+          const uy = (Math.abs(spanY) > 1) 
+            ? Math.max(0.0, Math.min(1.0, (my - cLeft.y) / spanY))
+            : ux;
+          // Weighted blend: 75% horizontal progression + 25% vertical wing assist
+          const progress = 0.75 * ux + 0.25 * uy;
+          return Math.max(0, Math.min(mid, Math.round(progress * mid)));
+        } else {
+          // Right Wing: Lane 7 (cMid) -> Lane 14 (cRight)
+          const spanX = Math.max(1, cRight.x - cMid.x);
+          const spanY = cRight.y - cMid.y;
+          const ux = Math.max(0.0, Math.min(1.0, (mx - cMid.x) / spanX));
+          const uy = (Math.abs(spanY) > 1)
+            ? Math.max(0.0, Math.min(1.0, (my - cMid.y) / spanY))
+            : ux;
+          // Weighted blend: 75% horizontal progression + 25% vertical wing assist
+          const progress = 0.75 * ux + 0.25 * uy;
+          const numRightLanes = laneCount - 1 - mid;
+          return Math.max(mid, Math.min(laneCount - 1, mid + Math.round(progress * numRightLanes)));
         }
       }
-      return bestLane;
+
+      // 2. U-Channel [id: 9]: Left Vertical Wall -> Curved Bottom -> Right Vertical Wall
+      if (web.id === 9 && laneCount >= 15) {
+        const cWallL = centers[3];
+        const cWallR = centers[11];
+        if (mx <= cWallL.x + 15) {
+          // Left wall: top to bottom (Lanes 0 -> 3)
+          const spanY = Math.max(1, cWallL.y - cLeft.y);
+          const uy = Math.max(0.0, Math.min(1.0, (my - cLeft.y) / spanY));
+          return Math.max(0, Math.min(3, Math.round(uy * 3)));
+        } else if (mx >= cWallR.x - 15) {
+          // Right wall: bottom to top (Lanes 11 -> 14)
+          const spanY = Math.max(1, cWallR.y - cRight.y);
+          const uy = Math.max(0.0, Math.min(1.0, (cWallR.y - my) / spanY));
+          return Math.max(11, Math.min(14, 11 + Math.round(uy * 3)));
+        } else {
+          // Bottom trench: left to right (Lanes 3 -> 11)
+          const spanX = Math.max(1, cWallR.x - cWallL.x);
+          const ux = Math.max(0.0, Math.min(1.0, (mx - cWallL.x) / spanX));
+          return Math.max(3, Math.min(11, 3 + Math.round(ux * 8)));
+        }
+      }
+
+      // 3. Planar Open Trenches: Flat Ribbon [id: 8], Jagged [id: 10], Wave [id: 15]
+      // Smooth linear horizontal progression across all lanes
+      const spanX = Math.max(1, cRight.x - cLeft.x);
+      const ux = Math.max(0.0, Math.min(1.0, (mx - cLeft.x) / spanX));
+      return Math.max(0, Math.min(laneCount - 1, Math.round(ux * (laneCount - 1))));
     }
   }
 

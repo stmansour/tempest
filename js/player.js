@@ -83,7 +83,7 @@ export class Player {
 
     this.shots.push({
       lane: this.lane,
-      z: 1.0,
+      z: this.z !== undefined ? this.z : 1.0,
       speed: this.shotSpeed,
       active: true
     });
@@ -137,11 +137,13 @@ export class Player {
     // Update shots with swept collision tracking (prevZ)
     for (let i = this.shots.length - 1; i >= 0; i--) {
       const shot = this.shots[i];
+      // If shot was already at or beyond the abyss in previous frame, discard it now
+      if (!shot.active || (shot.prevZ !== undefined && shot.prevZ <= 0.0) || shot.z < -0.15) {
+        this.shots.splice(i, 1);
+        continue;
+      }
       shot.prevZ = shot.z;
       shot.z -= shot.speed * dt;
-      if (shot.z <= 0.0 || !shot.active) {
-        this.shots.splice(i, 1);
-      }
     }
 
     // Death timer
